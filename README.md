@@ -116,6 +116,61 @@ Every layer is partitioned by `ingest_date=YYYY-MM-DD/`.
 7. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
 8. **Amazon Quick Suite** visualizes the results.
 
+## CI/CD Pipeline
+
+Every Lambda function is tested and deployed automatically with **GitHub Actions**. The workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
+
+### When it runs
+
+| Trigger                          | What happens                            |
+| -------------------------------- | --------------------------------------- |
+| Pull request to `main`           | Tests the changed Lambdas (no deploy)   |
+| Push or merge to `main`          | Tests, then deploys the changed Lambdas |
+| Manual run (`workflow_dispatch`) | Tests and deploys **every** Lambda      |
+
+### How it works
+
+```
+      Pull request / push to main / manual run
+                        │
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │ 1. DETECT CHANGES                            │
+ │    Which Lambda folders or tests changed?    │
+ └──────────────────────────────────────────────┘
+                        │
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │ 2. TEST (CI)        one parallel job per     │
+ │    pytest           changed Lambda           │
+ └──────────────────────────────────────────────┘
+                        │  tests pass (main only)
+                        ▼
+ ┌──────────────────────────────────────────────┐
+ │ 3. DEPLOY (CD)      one parallel job per     │
+ │    zip → AWS        changed Lambda           │
+ └──────────────────────────────────────────────┘
+                        │
+                        ▼
+        AWS Lambda functions updated with new code
+```
+
+1. **Detect changes.** [`dorny/paths-filter`](https://github.com/dorny/paths-filter) checks each Lambda's `src/` folder and its test file to build the list of Lambdas to run. Editing `deploy.yaml` itself marks every Lambda as changed. A manual run selects all of them.
+2. **Test (CI).** For each changed Lambda, a matrix job sets up Python 3.14, installs `pytest` and the Lambda's `requirements.txt`, then runs its test file in `tests/`. Lambdas that don't have a test file yet are skipped instead of failing.
+3. **Deploy (CD).** Runs only after the tests pass and never on pull requests. For each changed Lambda it:
+   - Builds a `.zip` deployment package with the dependencies installed next to `handler.py`.
+   - Signs in to AWS with OIDC by assuming the IAM role in the `AWS_DEPLOY_ROLE_ARN` secret.
+   - Looks up the function's ARN from its repository secret, runs `aws lambda update-function-code` and waits until the update finishes.
+
+Jobs use `fail-fast: false`, so one Lambda failing its tests or deploy doesn't cancel the others.
+
+### Adding a new Lambda to the pipeline
+
+1. Create the folder in `src/<stage>/<lambda_folder_name>` and create the files `handler.py`, `requirements.txt` and `__init__.py`. The lambdas folder name must start with `extract_`,`transform_` or `load_`, since the workflow uses the prefix to find the folder.
+2. Add its test file at `tests/<stage>/test_<lambda_name>.py`.
+3. Add a repository secret with the function's ARN, for example `AWS_TRANSFORM_EXCHANGE_RATES_ARN`.
+4. In `deploy.yaml`, add the Lambda to `FUNCTION_NAMES`, to the `paths-filter` filters and to the manual-run list in the `detect-changes` job.
+
 ## Tech Stack
 
 - Amazon EventBridge
@@ -127,6 +182,7 @@ Every layer is partitioned by `ingest_date=YYYY-MM-DD/`.
 - AWS Glue Data Catalog
 - Amazon Athena
 - Amazon Quick Suite
+- GitHub Actions (CI/CD)
 
 ## Project Structure
 
@@ -166,9 +222,9 @@ Each Lambda folder contains:
 
 ### CI/CD Pipeline key
 
-| Category                   | Stored in                           | Repository secret |
-| -------------------------- | ----------------------------------- | ----------------- |
-| AWS IAM Role OIDC Provider | `github actions repository secrets` | `AWS_DEPLOY_ARN`  |
+| Category                   | Stored in                           | Repository secret     |
+| -------------------------- | ----------------------------------- | --------------------- |
+| AWS IAM Role OIDC Provider | `github actions repository secrets` | `AWS_DEPLOY_ROLE_ARN` |
 
 ### API keys
 
