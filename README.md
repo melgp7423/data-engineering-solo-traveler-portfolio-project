@@ -146,6 +146,12 @@ Each Lambda folder contains:
 
 ## Setup
 
+### CI/CD Pipeline key
+
+| Category                   | Stored in                           | Repository secret |
+| -------------------------- | ----------------------------------- | ----------------- |
+| AWS IAM Role OIDC Provider | `github actions repository secrets` | `AWS_DEPLOY_ARN`  |
+
 ### API keys
 
 The extraction Lambdas need three API keys. The keys are stored in **AWS Secrets Manager**. Each Lambda has an environment variable that holds the name of its secret and the Lambda reads the key from Secrets Manager when it runs.
@@ -155,12 +161,6 @@ The extraction Lambdas need three API keys. The keys are stored in **AWS Secrets
 | SerpApi        | `extract_airplane_ticket_rates`, `extract_hotel_room_rates` | `API_KEY_SECRET`            |
 | Exchange Rates | `extract_exchange_rates`                                    | `ACCESS_KEY_SECRET`         |
 | Geoapify       | `extract_destination_activities`                            | `API_KEY_SECRET`            |
-
-### CI/CD Pipeline key
-
-| Category                   | Stored in                           | Repository secret |
-| -------------------------- | ----------------------------------- | ----------------- |
-| AWS IAM Role OIDC Provider | `github actions repository secrets` | `AWS_DEPLOY_ARN`  |
 
 ### AWS ARN keys
 
