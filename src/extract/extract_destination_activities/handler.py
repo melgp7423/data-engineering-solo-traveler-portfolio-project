@@ -96,8 +96,8 @@ class IngestionConfig:
     area_radius_meters: int = 10000
     places_limit: int = 500
     max_pages: int = 10
-    geocode_poll_seconds: float = 3
-    geocode_max_wait: float = 120
+    geocode_poll_seconds: float = 10-15
+    geocode_max_wait: float = 600
     lang: str = "en"
     request_timeout: int = 60
 
