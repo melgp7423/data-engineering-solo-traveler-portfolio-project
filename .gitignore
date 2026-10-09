@@ -1,0 +1,166 @@
+# =============================================================================
+# .gitignore — Data engineering project on AWS (Python, Lambda, Glue, S3,
+# Step Functions, Athena, QuickSight)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Secrets & credentials — NEVER commit these
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials
+credentials.json
+secrets.json
+*secret*.json
+
+# IAM policy JSONs that mention secrets are fine to commit
+!iam/**/*secret*.json
+.aws/
+aws-exports.js
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+build/
+dist/
+eggs/
+.eggs/
+wheels/
+pip-wheel-metadata/
+.installed.cfg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+
+# Type checkers / linters
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# -----------------------------------------------------------------------------
+# Lambda / deployment packages
+# -----------------------------------------------------------------------------
+*.zip
+package/
+layer/python/
+lambda_build/
+.build/
+
+# -----------------------------------------------------------------------------
+# AWS SAM / CDK / Serverless / Terraform (if you adopt them later)
+# -----------------------------------------------------------------------------
+.aws-sam/
+samconfig.toml.bak
+cdk.out/
+cdk.context.json
+.cdk.staging/
+.serverless/
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!example.tfvars
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# -----------------------------------------------------------------------------
+# AWS Glue local development
+# -----------------------------------------------------------------------------
+metastore_db/
+derby.log
+spark-warehouse/
+.glue/
+glue_libs/
+
+# -----------------------------------------------------------------------------
+# Local data — keep data in S3, not in git
+# (folder-based so IAM policy / config JSON files are still committed)
+# -----------------------------------------------------------------------------
+data/
+raw/
+processed/
+curated/
+output/
+downloads/
+tmp/
+*.parquet
+*.orc
+*.avro
+*.csv
+*.tsv
+*.xlsx
+*.gz
+*.snappy
+# Small sample files for unit tests are OK to commit
+!tests/fixtures/**
+
+# Athena / query result downloads
+athena_results/
+query_results/
+
+# -----------------------------------------------------------------------------
+# Logs
+# -----------------------------------------------------------------------------
+*.log
+logs/
+
+# -----------------------------------------------------------------------------
+# IDEs & editors
+# -----------------------------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# -----------------------------------------------------------------------------
+# OS files
+# -----------------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/

@@ -1,0 +1,161 @@
+name: CI/CD - Lambda Functions
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # manual run deploys every lambda
+
+env:
+  AWS_REGION: us-east-2
+  # Maps each lambda folder (src/extract/ for extraction, src/transformation/ for transformation) to its AWS Lambda function ARN
+  # ARNs come from repository secrets (same names as the local .env file)
+  FUNCTION_NAMES: >-
+    {
+      "extract_exchange_rates": "${{ secrets.AWS_EXTRACT_EXCHANGE_RATES_ARN }}",
+      "extract_airplane_ticket_rates": "${{ secrets.AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN }}",
+      "extract_hotel_room_rates": "${{ secrets.AWS_EXTRACT_HOTEL_ROOM_RATES_ARN }}",
+      "extract_destination_activities": "${{ secrets.AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN }}",
+      "transform_airplane_ticket_rates": "${{ secrets.AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN }}",
+      "transform_hotel_room_rates": "${{ secrets.AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN }}",
+      "transform_destination_activities": "${{ secrets.AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN }}",
+      "transform_combine_airplane_hotel_destination_datasets": "${{ secrets.AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_ARN }}"
+    }
+
+jobs:
+  # Figure out which lambdas changed so only those get tested/deployed
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      lambdas: ${{ steps.set.outputs.lambdas }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            extract_exchange_rates:
+              - 'src/extract/extract_exchange_rates/**'
+              - 'tests/extract/test_extract_exchange_rates.py'
+              - '.github/workflows/deploy.yaml'
+            extract_airplane_ticket_rates:
+              - 'src/extract/extract_airplane_ticket_rates/**'
+              - 'tests/extract/test_extract_airplane_ticket_rates.py'
+              - '.github/workflows/deploy.yaml'
+            extract_hotel_room_rates:
+              - 'src/extract/extract_hotel_room_rates/**'
+              - 'tests/extract/test_extract_hotel_room_rates.py'
+              - '.github/workflows/deploy.yaml'
+            extract_destination_activities:
+              - 'src/extract/extract_destination_activities/**'
+              - 'tests/extract/test_extract_destination_activities.py'
+              - '.github/workflows/deploy.yaml'
+            transform_airplane_ticket_rates:
+              - 'src/transformation/transform_airplane_ticket_rates/**'
+              - 'tests/transformation/test_transform_airplane_ticket_rates.py'
+              - '.github/workflows/deploy.yaml'
+            transform_hotel_room_rates:
+              - 'src/transformation/transform_hotel_room_rates/**'
+              - 'tests/transformation/test_transform_hotel_room_rates.py'
+              - '.github/workflows/deploy.yaml'
+            transform_destination_activities:
+              - 'src/transformation/transform_destination_activities/**'
+              - 'tests/transformation/test_transform_destination_activities.py'
+              - '.github/workflows/deploy.yaml'
+            transform_combine_airplane_hotel_destination_datasets:
+              - 'src/transformation/transform_combine_airplane_hotel_destination_datasets/**'
+              - 'tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py'
+              - '.github/workflows/deploy.yaml'
+
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo 'lambdas=["extract_exchange_rates","extract_airplane_ticket_rates","extract_hotel_room_rates","extract_destination_activities","transform_airplane_ticket_rates","transform_hotel_room_rates","transform_destination_activities","transform_combine_airplane_hotel_destination_datasets"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'lambdas=${{ steps.filter.outputs.changes }}' >> "$GITHUB_OUTPUT"
+          fi
+
+  # CI: install deps and run tests for each changed lambda
+  test:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.lambdas != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lambda: ${{ fromJSON(needs.detect-changes.outputs.lambdas) }}
+    env:
+      # transform_* lambdas live in src/transformation/, extract_* lambdas in src/extract/
+      STAGE_DIR: ${{ startsWith(matrix.lambda, 'transform_') && 'transformation' || 'extract' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          pip install pytest
+          pip install -r src/$STAGE_DIR/${{ matrix.lambda }}/requirements.txt
+
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+        # exit code 5 = no tests collected; a missing test file is also allowed until tests are written
+        run: |
+          TEST_FILE="tests/$STAGE_DIR/test_${{ matrix.lambda }}.py"
+          if [ ! -f "$TEST_FILE" ]; then
+            echo "No test file at $TEST_FILE, skipping"
+            exit 0
+          fi
+          pytest "$TEST_FILE" || [ $? -eq 5 ]
+
+  # CD: package and deploy each changed lambda (only on main, never on PRs)
+  deploy:
+    needs: [detect-changes, test]
+    if: github.event_name != 'pull_request' && needs.detect-changes.outputs.lambdas != '[]'
+    runs-on: ubuntu-latest
+    # id-token: write lets the job request an OIDC token to assume the AWS role
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        lambda: ${{ fromJSON(needs.detect-changes.outputs.lambdas) }}
+    env:
+      # transform_* lambdas live in src/transformation/, extract_* lambdas in src/extract/
+      STAGE_DIR: ${{ startsWith(matrix.lambda, 'transform_') && 'transformation' || 'extract' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Build deployment package
+        run: |
+          mkdir package
+          pip install -r src/$STAGE_DIR/${{ matrix.lambda }}/requirements.txt -t package
+          cp -r src/$STAGE_DIR/${{ matrix.lambda }}/. package/
+          cd package && zip -r ../code.zip .
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Deploy to Lambda
+        run: |
+          FUNCTION_NAME="${{ fromJSON(env.FUNCTION_NAMES)[matrix.lambda] }}"
+          if [ -z "$FUNCTION_NAME" ]; then
+            echo "::error::No ARN for ${{ matrix.lambda }} - add its AWS_*_ARN repository secret"
+            exit 1
+          fi
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --zip-file fileb://code.zip
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
