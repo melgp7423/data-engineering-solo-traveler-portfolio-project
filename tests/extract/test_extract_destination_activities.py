@@ -91,7 +91,7 @@ def config(**overrides):
         geocode_url="https://geo/batch",
         places_url="https://geo/places",
         api_key_secret="secret",
-        aws_hotel_room_prices_raw_data_s3_bucket="hotels",
+        aws_hotel_room_rates_raw_data_s3_bucket="hotels",
         hotel_prefix="hotel_room_rates/",
         aws_destination_activities_raw_data_s3_bucket="raw-bucket",
         raw_prefix="destination_activities/",
@@ -283,5 +283,5 @@ def test_config_rejects_placeholder_bucket():
 
 
 def test_config_rejects_empty_hotel_bucket():
-    with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_PRICES_RAW_DATA_S3_BUCKET"):
-        config(aws_hotel_room_prices_raw_data_s3_bucket="").validate()
+    with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET"):
+        config(aws_hotel_room_rates_raw_data_s3_bucket="").validate()
