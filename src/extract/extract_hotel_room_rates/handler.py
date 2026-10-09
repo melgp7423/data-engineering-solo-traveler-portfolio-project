@@ -43,7 +43,7 @@ Environment variables (placeholders shown):
     ADULTS                                              = 1
     HOTEL_CLASS                                         = 3,4,5
     CURRENCY                                            = USD
-    AWS_HOTEL_ROOM_PRICES_RAW_DATA_S3_BUCKET            = <YOUR_RAW_BUCKET_NAME>
+    AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET            = <YOUR_RAW_BUCKET_NAME>
     RAW_PREFIX                                          = hotel_room_rates/
     REQUEST_TIMEOUT                                     = 60
 
@@ -81,7 +81,7 @@ class IngestionConfig:
     api_key_secret: str
     aws_airplane_ticket_raw_data_s3_bucket: str
     flight_deals_prefix: str
-    aws_hotel_room_prices_raw_data_s3_bucket: str
+    aws_hotel_room_rates_raw_data_s3_bucket: str
     raw_prefix: str
     max_destinations: int = 50
     check_in_offset_days: int = 7
@@ -100,7 +100,7 @@ class IngestionConfig:
                 "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", ""
             ).strip(),
             flight_deals_prefix=os.environ.get("FLIGHT_DEALS_PREFIX", "airplane_ticket_rates/"),
-            aws_hotel_room_prices_raw_data_s3_bucket=os.environ.get("AWS_HOTEL_ROOM_PRICES_RAW_DATA_S3_BUCKET", "").strip(),
+            aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "").strip(),
             raw_prefix=os.environ.get("RAW_PREFIX", "hotel_room_rates/"),
             max_destinations=int(os.environ.get("MAX_DESTINATIONS", "50")),
             check_in_offset_days=int(os.environ.get("CHECK_IN_OFFSET_DAYS", "7")),
@@ -118,7 +118,7 @@ class IngestionConfig:
             "API_URL": self.api_url,
             "API_KEY_SECRET": self.api_key_secret,
             "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET": self.aws_airplane_ticket_raw_data_s3_bucket,
-            "AWS_HOTEL_ROOM_PRICES_RAW_DATA_S3_BUCKET": self.aws_hotel_room_prices_raw_data_s3_bucket,
+            "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET": self.aws_hotel_room_rates_raw_data_s3_bucket,
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
@@ -543,7 +543,7 @@ def build_service(config: IngestionConfig) -> IngestionService:
         ),
         validator=ResponseValidator(),
         key_builder=RawObjectKeyBuilder(config.raw_prefix),
-        writer=S3RawWriter(config.aws_hotel_room_prices_raw_data_s3_bucket),
+        writer=S3RawWriter(config.aws_hotel_room_rates_raw_data_s3_bucket),
     )
 
 

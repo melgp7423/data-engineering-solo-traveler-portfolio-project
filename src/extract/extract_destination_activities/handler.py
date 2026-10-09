@@ -38,7 +38,7 @@ Environment variables (placeholders shown):
     GEOCODE_URL                                             = https://api.geoapify.com/v1/batch/geocode/search
     PLACES_URL                                              = https://api.geoapify.com/v2/places
     API_KEY_SECRET                                          = prod/travelProject/geoapify   secret value = your Geoapify key
-    AWS_HOTEL_ROOM_PRICES_RAW_DATA_S3_BUCKET                = bucket the hotels Lambda writes to
+    AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET                 = bucket the hotels Lambda writes to
     HOTEL_PREFIX                                            = hotel_room_rates/
     CATEGORIES                                              = tourism,entertainment,leisure,catering.restaurant,beach,natural
     AREA_RADIUS_METERS                                      = 10000  half the side of the square searched around each city
@@ -85,7 +85,7 @@ class IngestionConfig:
     geocode_url: str
     places_url: str
     api_key_secret: str
-    aws_hotel_room_prices_raw_data_s3_bucket: str
+    aws_hotel_room_rates_raw_data_s3_bucket: str
     hotel_prefix: str
     aws_destination_activities_raw_data_s3_bucket: str
     raw_prefix: str
@@ -109,7 +109,7 @@ class IngestionConfig:
             ),
             places_url=os.environ.get("PLACES_URL", "https://api.geoapify.com/v2/places"),
             api_key_secret=os.environ.get("API_KEY_SECRET", "prod/travelProject/geoapify"),
-            aws_hotel_room_prices_raw_data_s3_bucket=os.environ.get("AWS_HOTEL_ROOM_PRICES_RAW_DATA_S3_BUCKET", "").strip(),
+            aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "").strip(),
             hotel_prefix=os.environ.get("HOTEL_PREFIX", "hotel_room_rates/"),
             aws_destination_activities_raw_data_s3_bucket=os.environ.get("AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", "").strip(),
             raw_prefix=os.environ.get("RAW_PREFIX", "destination_activities/"),
@@ -136,7 +136,7 @@ class IngestionConfig:
             "GEOCODE_URL": self.geocode_url,
             "PLACES_URL": self.places_url,
             "API_KEY_SECRET": self.api_key_secret,
-            "AWS_HOTEL_ROOM_PRICES_RAW_DATA_S3_BUCKET": self.aws_hotel_room_prices_raw_data_s3_bucket,
+            "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET": self.aws_hotel_room_rates_raw_data_s3_bucket,
             "AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET": self.aws_destination_activities_raw_data_s3_bucket,
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
@@ -654,7 +654,7 @@ class IngestionService:
 
 
 def build_locator(config: IngestionConfig) -> DestinationLocator:
-    return DestinationLocator(config.aws_hotel_room_prices_raw_data_s3_bucket, config.hotel_prefix)
+    return DestinationLocator(config.aws_hotel_room_rates_raw_data_s3_bucket, config.hotel_prefix)
 
 
 def build_service(config: IngestionConfig) -> IngestionService:
