@@ -93,7 +93,7 @@ Every layer is partitioned by `ingest_date=YYYY-MM-DD/`.
    - Airplane ticket rates
    - Hotel room rates
    - Destination activities: also categorizes each destination by vacation type (adventure, beach, restaurant, etc.) based on the places and activities found there.
-   A final transform Lambda joins the four silver datasets (converting prices with the exchange rates) into one combined **Parquet** dataset.
+     <br>A final transform Lambda joins the four silver datasets (converting prices with the exchange rates) into one combined **Parquet** dataset.
 6. **Load → Gold.** A load Lambda reads the combined **Parquet** dataset from the S3 combined bucket and writes it into the gold layer, an **Amazon Aurora Serverless** cluster. This gives downstream analytics one curated, query-ready table of flight, hotel, destination activities and currency-converted price data for each travel location. Aurora Serverless scales capacity up and down with the daily load.
 7. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
 8. **Amazon Quick Suite** visualizes the results.
