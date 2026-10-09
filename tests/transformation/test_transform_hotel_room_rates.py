@@ -345,8 +345,8 @@ def test_service_raises_when_every_file_fails():
 
 
 def test_config_requires_both_buckets(monkeypatch):
-    monkeypatch.setenv("AWS_HOTEL_ROOM_PRICES_RAW_DATA_S3_BUCKET", "raw")
-    monkeypatch.delenv("AWS_HOTEL_ROOM_PRICES_TRANSFORMED_DATA_S3_BUCKET", raising=False)
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "raw")
+    monkeypatch.delenv("AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET", raising=False)
 
-    with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_PRICES_TRANSFORMED_DATA_S3_BUCKET"):
+    with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET"):
         TransformConfig.from_env()
