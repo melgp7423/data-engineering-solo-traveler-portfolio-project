@@ -1,8 +1,24 @@
 # Solo Traveler Data Engineering Project
 
-A simple AWS data pipeline that pulls travel data from four sources: exchange rates, flights, hotels and destination activities. It stores the raw data, transforms it and makes it queryable for dashboards.
+## Project Summary
 
-The activities data is used to categorize each vacation destination by the main types of activities it offers, so travelers can see at a glance whether it's an adventure, beach, restaurant (food) or other kind of vacation.
+An AWS data pipeline that finds the cheapest last-minute vacations for a solo traveler flying out of Phoenix. It pulls travel data from four sources (flights, hotels, destination activities and exchange rates), stores the raw data, transforms it and makes it queryable for dashboards.
+
+### How it works
+
+- **Flights:** Starting from Phoenix, the pipeline finds the 30 cheapest flight destinations in the US, Canada and Mexico.
+- **Hotels:** For each destination extracted in the raw flight data, it pulls room rates for 18 hotel properties.
+- **Destination activities:** For each destination, the Geoapify API finds activities within a set radius of the city, such as artwork, museums, viewpoints, cultural entertainment, heritage sites, outdoor activities, beaches, national parks and skiing. These activities are used to categorize each destination by vacation type, so travelers can see at a glance whether it's an adventure, beach, restaurant (food) or other kind of trip.
+- **Exchange rates:** The pipeline pulls the latest USD → Mexican peso and USD → Canadian dollar rates on the day the data is extracted. Rates are only attached to international destinations.
+
+### What you get
+
+The transformed data is loaded into the gold layer in Amazon Aurora Serverless and queried with Athena. For each trip, it shows:
+
+- Which vacations depart in 7 days.
+- Which destinations are cheapest, based on a round-trip flight from Phoenix plus a week-long hotel stay.
+- The activities available at each destination and its vacation type.
+- The exchange rate, for international destinations.
 
 ## Data Sources
 
