@@ -49,7 +49,7 @@ from typing import Dict, Optional
 import boto3
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +161,12 @@ class HeaderKeyAuthenticator:
 class ExchangeRatesClient:
     """Performs the GET request and returns the raw response bytes."""
 
-    HEADERS = {"Accept": "application/json"}
+    # Cloudflare in front of freecurrencyapi rejects urllib's default
+    # "Python-urllib/3.x" User-Agent with a 403 (error 1010), so send our own.
+    HEADERS = {
+        "Accept": "application/json",
+        "User-Agent": "travel-app-data-engineering/1.0 (+aws-lambda)",
+    }
 
     def __init__(self, endpoint_url: str, authenticator: HeaderKeyAuthenticator, timeout: int):
         self._endpoint_url = endpoint_url
@@ -170,10 +175,18 @@ class ExchangeRatesClient:
 
     def fetch(self, params: Dict[str, str]) -> bytes:
         query = urllib.parse.urlencode(params)
+        headers = self._authenticator.apply(self.HEADERS)
         request = urllib.request.Request(
             f"{self._endpoint_url}?{query}",
-            headers=self._authenticator.apply(self.HEADERS),
+            headers=headers,
             method="GET",
+        )
+        # DEBUG: log what is actually sent, with the API key redacted.
+        logger.debug(
+            "GET %s?%s headers=%s",
+            self._endpoint_url,
+            query,
+            {k: (f"<redacted len={len(v)}>" if k.lower() == "apikey" else v) for k, v in headers.items()},
         )
         # The key travels in a header, never the URL, so it never hits CloudWatch.
         try:
@@ -182,7 +195,14 @@ class ExchangeRatesClient:
                 logger.info("GET %s -> %s (%d bytes)", self._endpoint_url, response.status, len(body))
                 return body
         except urllib.error.HTTPError as err:
-            logger.error("HTTP %s from %s: %s", err.code, self._endpoint_url, err.read()[:500])
+            body = err.read()[:1000]
+            logger.error("HTTP %s from %s: %s", err.code, self._endpoint_url, body)
+            # DEBUG: tell a Cloudflare block apart from a real API auth/quota error.
+            logger.debug("Response headers: server=%s cf-ray=%s",
+                         err.headers.get("server"), err.headers.get("cf-ray"))
+            if b"cloudflare_error" in body:
+                logger.error("Blocked by Cloudflare before reaching the API (check User-Agent / source IP), "
+                             "not an API key problem")
             raise
         except urllib.error.URLError as err:
             logger.error("Could not reach %s: %s", self._endpoint_url, err.reason)
