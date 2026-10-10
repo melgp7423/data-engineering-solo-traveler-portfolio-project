@@ -149,8 +149,9 @@ def test_locator_raises_when_nothing_found():
 # ---------------------------------------------------------------------------
 # CityGeocoder
 # ---------------------------------------------------------------------------
-def make_geocoder(fake):
-    return CityGeocoder(fake, ResponseValidator(), "https://geo/search", "en", sleep=lambda _s: None)
+def make_geocoder(fake, sleeps=None):
+    sleep = sleeps.append if sleeps is not None else (lambda _s: None)
+    return CityGeocoder(fake, ResponseValidator(), "https://geo/search", "en", sleep=sleep)
 
 
 def test_geocoder_sends_one_request_per_city_and_keeps_input_order():
@@ -172,15 +173,43 @@ def rate_limited():
     return urllib.error.HTTPError("https://geo/search", 429, "Too Many Requests", {}, None)
 
 
+def http_error(code):
+    return urllib.error.HTTPError("https://geo/search", code, "error", {}, None)
+
+
 def test_geocoder_retries_when_rate_limited():
     fake = FakeGeoapify({("GET", "https://geo/search"): [
         rate_limited(),
+        http_error(503),
         ok({"results": [{"lat": 1.0, "lon": 2.0}]}),
     ]})
-    result = make_geocoder(fake).geocode(["X"])
+    sleeps = []
+    result = make_geocoder(fake, sleeps).geocode(["X"])
 
     assert result.destinations == [GeocodedDestination("X", 1.0, 2.0)]
-    assert len(fake.calls) == 2
+    assert len(fake.calls) == 3
+    assert sleeps == [1, 2]  # exponential backoff
+
+
+def test_geocoder_does_not_retry_client_errors():
+    fake = FakeGeoapify({("GET", "https://geo/search"): [http_error(401)]})
+    result = make_geocoder(fake).geocode(["X"])
+
+    assert result.not_found == ["X"]
+    assert len(fake.calls) == 1
+
+
+def test_geocoder_treats_network_and_api_errors_as_not_found():
+    fake = FakeGeoapify({("GET", "https://geo/search"): [
+        urllib.error.URLError("timed out"),
+        ok({"statusCode": 400, "error": "Bad Request", "message": "bad text"}),
+    ]})
+    geocoder = CityGeocoder(fake, ResponseValidator(), "https://geo/search", "en", concurrency=1)
+    result = geocoder.geocode(["A", "B"])
+
+    assert result.destinations == []
+    assert result.not_found == ["A", "B"]
+    assert all("error" in r["response"] for r in json.loads(result.raw))
 
 
 def test_geocoder_reports_city_as_not_found_after_retries_run_out():
@@ -283,6 +312,21 @@ def test_service_pages_with_offset_when_a_page_is_full():
     assert result["place_count"] == 3
 
 
+def test_service_is_partial_when_some_cities_do_not_geocode():
+    fake = FakeGeoapify(
+        {("POST", "https://geo/places"): [ok({"features": [feature(1)]})]},
+        cities={"X": (1.0, 1.0)},
+    )
+    writer = FakeWriter()
+    result = make_service(fake, writer, config()).run(["X", "Atlantis"])
+
+    assert result["status"] == "PARTIAL"
+    assert result["not_geocoded"] == ["Atlantis"]
+    assert result["destinations"] == [{"destination": "X", "lat": 1.0, "lon": 1.0}]
+    raw = json.loads(writer.objects[result["geocode_key"]])
+    assert [r["query"]["text"] for r in raw] == ["X", "Atlantis"]
+
+
 def test_service_fails_when_nothing_geocodes():
     fake = FakeGeoapify()
     with pytest.raises(IngestionError):
@@ -297,3 +341,36 @@ def test_config_rejects_placeholder_bucket():
 def test_config_rejects_empty_hotel_bucket():
     with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET"):
         config(aws_hotel_room_rates_raw_data_s3_bucket="").validate()
+
+
+def test_config_rejects_geocode_concurrency_out_of_range():
+    for value in (0, 6):
+        with pytest.raises(ValueError, match="GEOCODE_CONCURRENCY"):
+            config(geocode_concurrency=value).validate()
+
+
+def test_config_from_env_uses_synchronous_geocoding_defaults(monkeypatch):
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "hotels")
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", "raw-bucket")
+    # The old batch URL variable must not be picked up any more.
+    monkeypatch.setenv("GEOCODE_URL", "https://api.geoapify.com/v1/batch/geocode/search")
+    for name in ("GEOCODE_SEARCH_URL", "GEOCODE_CONCURRENCY", "REQUEST_TIMEOUT"):
+        monkeypatch.delenv(name, raising=False)
+
+    cfg = IngestionConfig.from_env()
+
+    assert cfg.geocode_url == "https://api.geoapify.com/v1/geocode/search"
+    assert cfg.geocode_concurrency == 4
+    assert cfg.request_timeout == 30
+
+
+def test_config_from_env_reads_geocode_overrides(monkeypatch):
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "hotels")
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", "raw-bucket")
+    monkeypatch.setenv("GEOCODE_SEARCH_URL", "https://geo/custom")
+    monkeypatch.setenv("GEOCODE_CONCURRENCY", "2")
+
+    cfg = IngestionConfig.from_env()
+
+    assert cfg.geocode_url == "https://geo/custom"
+    assert cfg.geocode_concurrency == 2
