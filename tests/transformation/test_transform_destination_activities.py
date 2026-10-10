@@ -185,7 +185,10 @@ def test_groups_rows_by_county_one_row_per_activity_and_drops_duplicates():
         make_feature(name="DTE"),
         make_feature(name="Spirit of Detroit", formatted="Spirit of Detroit, Detroit, MI"),
         make_feature(name="DTE"),  # same place again
-        make_feature(name="Ford House", county="Macomb County", formatted="Ford House, Detroit, MI"),
+        # Another city in the same county goes in the same group.
+        make_feature(name="Henry Ford Museum", city="Dearborn", formatted="Henry Ford Museum, Dearborn, MI"),
+        # Same county name in another state is a separate group.
+        make_feature(name="Wayne County Fair", state="Ohio", city="Wooster", formatted="Wayne County Fair, Wooster, OH"),
         make_feature(
             name="The Alamo", state="Texas", county="Bexar County", city="San Antonio",
             formatted="The Alamo, San Antonio, TX",
@@ -194,32 +197,33 @@ def test_groups_rows_by_county_one_row_per_activity_and_drops_duplicates():
 
     tables = CountyGrouper().group({"ingest_date=2026-10-09": rows})
 
-    wayne = ("ingest_date=2026-10-09", "Wayne County", "Detroit", "Michigan")
+    wayne_mi = ("ingest_date=2026-10-09", "Wayne County", "Michigan")
     assert sorted(tables) == [
-        ("ingest_date=2026-10-09", "Bexar County", "San Antonio", "Texas"),
-        ("ingest_date=2026-10-09", "Macomb County", "Detroit", "Michigan"),
-        wayne,
+        ("ingest_date=2026-10-09", "Bexar County", "Texas"),
+        wayne_mi,
+        ("ingest_date=2026-10-09", "Wayne County", "Ohio"),
     ]
-    assert tables[wayne].schema == ActivitiesTransformer.SCHEMA
-    assert tables[wayne].column("name").to_pylist() == ["DTE", "Spirit of Detroit"]
-    assert tables[("ingest_date=2026-10-09", "Macomb County", "Detroit", "Michigan")].num_rows == 1
+    assert tables[wayne_mi].schema == ActivitiesTransformer.SCHEMA
+    assert tables[wayne_mi].column("name").to_pylist() == ["DTE", "Spirit of Detroit", "Henry Ford Museum"]
+    assert tables[wayne_mi].column("city").to_pylist() == ["Detroit", "Detroit", "Dearborn"]
+    assert tables[("ingest_date=2026-10-09", "Wayne County", "Ohio")].num_rows == 1
 
 
 # ---------------------------------------------------------------------------
 # TransformedKeyBuilder
 # ---------------------------------------------------------------------------
-def test_key_builder_names_file_county_city_state_in_same_partition():
+def test_key_builder_names_file_county_state_in_same_partition():
     builder = TransformedKeyBuilder("destination_activities/", "activities/")
     partition = builder.partition(f"destination_activities/{PAGE_0}")
 
     assert partition == "ingest_date=2026-10-09"
     assert (
-        builder.build(partition, "Wayne County", "Detroit", "Michigan")
-        == "activities/ingest_date=2026-10-09/activities-wayne_county-detroit-michigan.parquet"
+        builder.build(partition, "Wayne County", "Michigan")
+        == "activities/ingest_date=2026-10-09/activities-wayne_county-michigan.parquet"
     )
     assert (
-        builder.build(partition, "Forsyth County", "Winston-Salem", "North Carolina")
-        == "activities/ingest_date=2026-10-09/activities-forsyth_county-winston_salem-north_carolina.parquet"
+        builder.build(partition, "Miami-Dade County", "Florida")
+        == "activities/ingest_date=2026-10-09/activities-miami_dade_county-florida.parquet"
     )
 
 
@@ -280,13 +284,17 @@ def test_service_combines_pages_and_writes_one_parquet_per_county():
     assert result["row_count"] == 3
     puts = {p["Key"]: p for p in s3.puts}
     assert set(puts) == {
-        "activities/ingest_date=2026-10-09/activities-wayne_county-detroit-michigan.parquet",
-        "activities/ingest_date=2026-10-09/activities-bexar_county-san_antonio-texas.parquet",
+        "activities/ingest_date=2026-10-09/activities-wayne_county-michigan.parquet",
+        "activities/ingest_date=2026-10-09/activities-bexar_county-texas.parquet",
     }
-    detroit = read_parquet(puts["activities/ingest_date=2026-10-09/activities-wayne_county-detroit-michigan.parquet"])
-    assert detroit.column_names == ["name", "country_code", "state", "county", "city", "formatted", "categories"]
-    assert set(detroit.column("county").to_pylist()) == {"Wayne County"}
-    assert detroit.column("name").to_pylist() == ["DTE", "Spirit of Detroit"]
+    wayne = read_parquet(puts["activities/ingest_date=2026-10-09/activities-wayne_county-michigan.parquet"])
+    assert wayne.column_names == ["name", "country_code", "state", "county", "city", "formatted", "categories"]
+    assert set(wayne.column("county").to_pylist()) == {"Wayne County"}
+    assert wayne.column("name").to_pylist() == ["DTE", "Spirit of Detroit"]
+    assert [(w["county"], w["state"]) for w in result["written"]] == [
+        ("Bexar County", "Texas"),
+        ("Wayne County", "Michigan"),
+    ]
     assert all(p["Bucket"] == "transformed-bucket" for p in s3.puts)
 
 
