@@ -1,6 +1,7 @@
 import json
 import sys
 import types
+import urllib.error
 from datetime import date
 
 import pytest
@@ -14,11 +15,10 @@ except ImportError:
 
 from extract.extract_destination_activities.handler import (
     AreaPolygonBuilder,
-    BatchGeocoder,
+    CityGeocoder,
     DestinationLocator,
     DestinationsNotFoundError,
     GeocodedDestination,
-    GeocodingError,
     HttpResponse,
     IngestionError,
     IngestionService,
@@ -33,15 +33,26 @@ from extract.extract_destination_activities.handler import (
 # Fakes
 # ---------------------------------------------------------------------------
 class FakeGeoapify:
-    """Records calls and replays queued responses per (method, url)."""
+    """Records calls and replays queued responses per (method, url).
+    Geocoding GETs are answered per city from `cities` ({name: (lat, lon)});
+    a city missing from it gets an empty result. A queued Exception is raised."""
 
-    def __init__(self, responses):
-        self._responses = {k: list(v) for k, v in responses.items()}
+    def __init__(self, responses=None, cities=None):
+        self._responses = {k: list(v) for k, v in (responses or {}).items()}
+        self._cities = cities or {}
         self.calls = []
 
     def get(self, url, params):
         self.calls.append(("GET", url, params, None))
-        return self._responses[("GET", url)].pop(0)
+        if ("GET", url) in self._responses:
+            response = self._responses[("GET", url)].pop(0)
+            if isinstance(response, Exception):
+                raise response
+            return response
+        if params["text"] in self._cities:
+            lat, lon = self._cities[params["text"]]
+            return ok({"results": [{"lat": lat, "lon": lon}], "query": {"text": params["text"]}})
+        return ok({"results": [], "query": {"text": params["text"]}})
 
     def post_json(self, url, payload, params=None):
         self.calls.append(("POST", url, params, payload))
@@ -88,7 +99,7 @@ def ok(payload, status=200):
 
 def config(**overrides):
     values = dict(
-        geocode_url="https://geo/batch",
+        geocode_url="https://geo/search",
         places_url="https://geo/places",
         api_key_secret="secret",
         aws_hotel_room_rates_raw_data_s3_bucket="hotels",
@@ -136,44 +147,48 @@ def test_locator_raises_when_nothing_found():
 
 
 # ---------------------------------------------------------------------------
-# BatchGeocoder
+# CityGeocoder
 # ---------------------------------------------------------------------------
-def make_geocoder(fake, clock_values=None):
-    clock = iter(clock_values or [0, 1, 2, 3, 4, 5])
-    return BatchGeocoder(
-        fake, ResponseValidator(), "https://geo/batch", "en",
-        poll_seconds=1, max_wait=10, sleep=lambda _s: None, clock=lambda: next(clock),
-    )
+def make_geocoder(fake):
+    return CityGeocoder(fake, ResponseValidator(), "https://geo/search", "en", sleep=lambda _s: None)
 
 
-def test_geocoder_submits_one_batch_and_polls_until_done():
-    fake = FakeGeoapify({
-        ("POST", "https://geo/batch"): [ok({"id": "job1", "status": "pending"}, status=202)],
-        ("GET", "https://geo/batch"): [
-            ok({"id": "job1", "status": "pending"}, status=202),
-            ok([
-                {"query": {"text": "Cancun, Mexico"}, "lat": 21.16, "lon": -86.85},
-                {"query": {"text": "Atlantis"}},
-            ]),
-        ],
-    })
-    result = make_geocoder(fake).geocode(["Cancun, Mexico", "Atlantis"])
+def test_geocoder_sends_one_request_per_city_and_keeps_input_order():
+    fake = FakeGeoapify(cities={"Cancun, Mexico": (21.16, -86.85), "Paris, France": (48.85, 2.35)})
+    result = make_geocoder(fake).geocode(["Cancun, Mexico", "Atlantis", "Paris, France"])
 
-    assert result.destinations == [GeocodedDestination("Cancun, Mexico", 21.16, -86.85)]
+    assert result.destinations == [
+        GeocodedDestination("Cancun, Mexico", 21.16, -86.85),
+        GeocodedDestination("Paris, France", 48.85, 2.35),
+    ]
     assert result.not_found == ["Atlantis"]
-    post = fake.calls[0]
-    assert post[3] == ["Cancun, Mexico", "Atlantis"]
-    assert post[2]["type"] == "city"
-    assert fake.calls[1][2] == {"id": "job1", "format": "json"}
+    assert sorted(c[2]["text"] for c in fake.calls) == ["Atlantis", "Cancun, Mexico", "Paris, France"]
+    assert all(c[2]["type"] == "city" and c[2]["limit"] == "1" for c in fake.calls)
+    raw = json.loads(result.raw)
+    assert [r["query"]["text"] for r in raw] == ["Cancun, Mexico", "Atlantis", "Paris, France"]
 
 
-def test_geocoder_times_out():
-    fake = FakeGeoapify({
-        ("POST", "https://geo/batch"): [ok({"id": "job1"}, status=202)],
-        ("GET", "https://geo/batch"): [ok({"id": "job1"}, status=202)] * 5,
-    })
-    with pytest.raises(GeocodingError):
-        make_geocoder(fake, clock_values=[0, 5, 11]).geocode(["Cancun, Mexico"])
+def rate_limited():
+    return urllib.error.HTTPError("https://geo/search", 429, "Too Many Requests", {}, None)
+
+
+def test_geocoder_retries_when_rate_limited():
+    fake = FakeGeoapify({("GET", "https://geo/search"): [
+        rate_limited(),
+        ok({"results": [{"lat": 1.0, "lon": 2.0}]}),
+    ]})
+    result = make_geocoder(fake).geocode(["X"])
+
+    assert result.destinations == [GeocodedDestination("X", 1.0, 2.0)]
+    assert len(fake.calls) == 2
+
+
+def test_geocoder_reports_city_as_not_found_after_retries_run_out():
+    fake = FakeGeoapify({("GET", "https://geo/search"): [rate_limited()] * 4})
+    result = make_geocoder(fake).geocode(["X"])
+
+    assert result.destinations == []
+    assert result.not_found == ["X"]
 
 
 # ---------------------------------------------------------------------------
@@ -231,13 +246,10 @@ def feature(i):
 
 def test_service_sends_single_places_request_for_all_destinations():
     cfg = config()
-    fake = FakeGeoapify({
-        ("POST", "https://geo/batch"): [ok([
-            {"query": {"text": "Cancun, Mexico"}, "lat": 21.16, "lon": -86.85},
-            {"query": {"text": "Paris, France"}, "lat": 48.85, "lon": 2.35},
-        ])],
-        ("POST", "https://geo/places"): [ok({"type": "FeatureCollection", "features": [feature(1)]})],
-    })
+    fake = FakeGeoapify(
+        {("POST", "https://geo/places"): [ok({"type": "FeatureCollection", "features": [feature(1)]})]},
+        cities={"Cancun, Mexico": (21.16, -86.85), "Paris, France": (48.85, 2.35)},
+    )
     writer = FakeWriter()
     result = make_service(fake, writer, cfg).run(["Cancun, Mexico", "Paris, France"])
 
@@ -257,13 +269,13 @@ def test_service_sends_single_places_request_for_all_destinations():
 
 def test_service_pages_with_offset_when_a_page_is_full():
     cfg = config(places_limit=2)
-    fake = FakeGeoapify({
-        ("POST", "https://geo/batch"): [ok([{"query": {"text": "X"}, "lat": 1.0, "lon": 1.0}])],
-        ("POST", "https://geo/places"): [
+    fake = FakeGeoapify(
+        {("POST", "https://geo/places"): [
             ok({"features": [feature(1), feature(2)]}),
             ok({"features": [feature(3)]}),
-        ],
-    })
+        ]},
+        cities={"X": (1.0, 1.0)},
+    )
     result = make_service(fake, FakeWriter(), cfg).run(["X"])
 
     offsets = [c[3]["offset"] for c in fake.calls if c[1] == "https://geo/places"]
@@ -272,7 +284,7 @@ def test_service_pages_with_offset_when_a_page_is_full():
 
 
 def test_service_fails_when_nothing_geocodes():
-    fake = FakeGeoapify({("POST", "https://geo/batch"): [ok([{"query": {"text": "X"}}])]})
+    fake = FakeGeoapify()
     with pytest.raises(IngestionError):
         make_service(fake, FakeWriter(), config()).run(["X"])
 
