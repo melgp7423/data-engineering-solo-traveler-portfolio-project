@@ -121,12 +121,12 @@ class IngestionConfig:
                 if c.strip()
             ),
             area_radius_meters=int(os.environ.get("AREA_RADIUS_METERS", "10000")),
-            places_limit=int(os.environ.get("PLACES_LIMIT", "500")),
+            places_limit=int(os.environ.get("PLACES_LIMIT", "300")),
             max_pages=int(os.environ.get("MAX_PAGES", "10")),
             geocode_poll_seconds=float(os.environ.get("GEOCODE_POLL_SECONDS", "3")),
-            geocode_max_wait=float(os.environ.get("GEOCODE_MAX_WAIT", "120")),
+            geocode_max_wait=float(os.environ.get("GEOCODE_MAX_WAIT", "1200")),
             lang=os.environ.get("PLACES_LANG", "en").strip().lower(),
-            request_timeout=int(os.environ.get("REQUEST_TIMEOUT", "60")),
+            request_timeout=int(os.environ.get("REQUEST_TIMEOUT", "120")),
         )
         config.validate()
         return config
