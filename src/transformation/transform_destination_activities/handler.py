@@ -1,29 +1,31 @@
 """
 Lambda: read every raw Geoapify Places JSON page in one ingest_date partition
 from S3, keep only complete activities and the fields the pipeline needs,
-group them by city, and write one Parquet file per city back to S3 —
+group them by county, and write one Parquet file per county back to S3 —
 OOP / Single Responsibility Principle.
 
 Input  (raw bucket):         <RAW_PREFIX>ingest_date=YYYY-MM-DD/places_HHMMSS_<run>_page000.json   (one or more pages per run)
-Output (transformed bucket): <TRANSFORMED_PREFIX>ingest_date=YYYY-MM-DD/activities_detroit.parquet  (one per city)
+Output (transformed bucket): <TRANSFORMED_PREFIX>ingest_date=YYYY-MM-DD/activities-wayne_county-detroit-michigan.parquet
+                             (activities-COUNTY-CITY-STATE, one per county + city + state)
 
 The geocode_*.json files in the same partition are ignored.
 
 A feature is kept only if its "properties" has a non-empty value for every
-one of: name, country_code, city, formatted, categories (a non-empty list).
-Anything else is dropped. A city's activities can be spread across several
-pages, so all pages in the partition are read before grouping.
+one of: name, country_code, state, county, city, formatted, categories
+(a non-empty list). Anything else is dropped. A county's activities can be
+spread across several pages, so all pages in the partition are read before
+grouping.
 
 Output layout: one row per activity (columnar):
 
-    name, country_code, city, formatted, categories (list of strings)
+    name, country_code, state, county, city, formatted, categories (list of strings)
 
 Classes and their one job:
     TransformConfig            -> read & validate settings
     RawObjectLocator           -> work out which raw S3 objects to transform from the event
     S3RawReader                -> read the raw JSON from S3
     ActivitiesTransformer      -> raw payload -> list of clean activity rows
-    CityGrouper                -> rows -> one pyarrow Table per city
+    CountyGrouper              -> rows -> one pyarrow Table per county + city + state
     TransformedKeyBuilder      -> name the Parquet object
     S3ParquetWriter            -> serialize the Table to Parquet and write it to S3
     TransformService           -> orchestrate locate -> read -> transform -> group -> name -> store
@@ -228,16 +230,18 @@ class InvalidRawPayloadError(Exception):
 class ActivitiesTransformer:
     """
     Turns a Places FeatureCollection into clean activity rows. A feature is
-    kept only when its properties has a non-empty name, country_code, city
-    and formatted, and a non-empty categories list; every category string is
-    kept as-is.
+    kept only when its properties has a non-empty name, country_code, state,
+    county, city and formatted, and a non-empty categories list; every
+    category string is kept as-is.
     """
 
-    STRING_FIELDS = ("name", "country_code", "city", "formatted")
+    STRING_FIELDS = ("name", "country_code", "state", "county", "city", "formatted")
 
     SCHEMA = pa.schema([
         pa.field("name", pa.string()),
         pa.field("country_code", pa.string()),
+        pa.field("state", pa.string()),
+        pa.field("county", pa.string()),
         pa.field("city", pa.string()),
         pa.field("formatted", pa.string()),
         pa.field("categories", pa.list_(pa.string())),
@@ -273,9 +277,10 @@ class ActivitiesTransformer:
         return row
 
 
-class CityGrouper:
+class CountyGrouper:
     """
-    Groups rows by (partition, city) and builds one Table per group. The
+    Groups rows by (partition, county, city, state) and builds one Table per
+    group, matching the activities-COUNTY-CITY-STATE file name. The
     partition is the raw key's folder (e.g. "ingest_date=2026-10-09"), so
     pages from different days never end up in the same file. The same place
     showing up on two pages or in two runs that day is only kept once.
@@ -284,16 +289,19 @@ class CityGrouper:
     def __init__(self, schema: pa.Schema = ActivitiesTransformer.SCHEMA):
         self._schema = schema
 
-    def group(self, rows_by_partition: Dict[str, List[Dict[str, object]]]) -> Dict[Tuple[str, str], pa.Table]:
-        grouped: Dict[Tuple[str, str], List[Dict[str, object]]] = defaultdict(list)
+    def group(
+        self, rows_by_partition: Dict[str, List[Dict[str, object]]]
+    ) -> Dict[Tuple[str, str, str, str], pa.Table]:
+        grouped: Dict[Tuple[str, str, str, str], List[Dict[str, object]]] = defaultdict(list)
         seen = set()
         for partition, rows in rows_by_partition.items():
             for row in rows:
-                identity = (partition, row["city"], row["name"], row["formatted"])
+                group_key = (partition, row["county"], row["city"], row["state"])
+                identity = (*group_key, row["name"], row["formatted"])
                 if identity in seen:
                     continue
                 seen.add(identity)
-                grouped[(partition, row["city"])].append(row)
+                grouped[group_key].append(row)
 
         return {
             group_key: pa.Table.from_pylist(rows, schema=self._schema)
@@ -306,10 +314,12 @@ class CityGrouper:
 # ---------------------------------------------------------------------------
 class TransformedKeyBuilder:
     """
-    Puts each city's file in the same ingest_date= partition as its raw pages,
-    under the transformed prefix, named after the city:
-        ingest_date=2026-10-09/places_021651_fde87987_page000.json  (city "Detroit")
-     -> ingest_date=2026-10-09/activities_detroit.parquet
+    Puts each county's file in the same ingest_date= partition as its raw
+    pages, under the transformed prefix, named activities-COUNTY-CITY-STATE.
+    "-" separates the parts, so spaces and punctuation inside a part become "_":
+        ingest_date=2026-10-09/places_021651_fde87987_page000.json
+        (county "Wayne County", city "Detroit", state "Michigan")
+     -> ingest_date=2026-10-09/activities-wayne_county-detroit-michigan.parquet
     """
 
     def __init__(self, raw_prefix: str, transformed_prefix: str):
@@ -320,14 +330,15 @@ class TransformedKeyBuilder:
         relative = raw_key[len(self._raw_prefix):] if raw_key.startswith(self._raw_prefix) else raw_key
         return posixpath.dirname(relative)
 
-    def build(self, partition: str, city: str) -> str:
+    def build(self, partition: str, county: str, city: str, state: str) -> str:
         folder = f"{partition}/" if partition else ""
-        return f"{self._transformed_prefix}{folder}activities_{self._slug(city)}.parquet"
+        name = "-".join(self._slug(part) for part in (county, city, state))
+        return f"{self._transformed_prefix}{folder}activities-{name}.parquet"
 
     @staticmethod
-    def _slug(city: str) -> str:
+    def _slug(part: str) -> str:
         # "San José" -> "san_josé", "Winston-Salem" -> "winston_salem"
-        slug = re.sub(r"[^\w]+", "_", city.lower()).strip("_")
+        slug = re.sub(r"[^\w]+", "_", part.lower()).strip("_")
         return slug or "unknown"
 
 
@@ -362,14 +373,14 @@ class TransformError(Exception):
 
 
 class TransformService:
-    """Coordinates locate -> read -> transform (per page) -> group by city -> name -> store."""
+    """Coordinates locate -> read -> transform (per page) -> group by county -> name -> store."""
 
     def __init__(
         self,
         locator: RawObjectLocator,
         reader: S3RawReader,
         transformer: ActivitiesTransformer,
-        grouper: CityGrouper,
+        grouper: CountyGrouper,
         key_builder: TransformedKeyBuilder,
         writer: S3ParquetWriter,
     ):
@@ -405,10 +416,19 @@ class TransformService:
             raise TransformError(f"No complete activities found in {read}")
 
         written = []
-        for (partition, city), table in tables.items():
-            key = self._writer.write(self._key_builder.build(partition, city), table)
-            logger.info("Wrote %d activities for %s to s3://%s/%s", table.num_rows, city, self._writer.bucket, key)
-            written.append({"city": city, "key": key, "row_count": table.num_rows})
+        for (partition, county, city, state), table in tables.items():
+            key = self._writer.write(self._key_builder.build(partition, county, city, state), table)
+            logger.info(
+                "Wrote %d activities for %s, %s, %s to s3://%s/%s",
+                table.num_rows, county, city, state, self._writer.bucket, key,
+            )
+            written.append({
+                "county": county,
+                "city": city,
+                "state": state,
+                "key": key,
+                "row_count": table.num_rows,
+            })
 
         return {
             "status": "PARTIAL" if failed else "SUCCEEDED",
@@ -428,7 +448,7 @@ def build_service(config: TransformConfig) -> TransformService:
         locator=RawObjectLocator(config.aws_destination_activities_raw_data_s3_bucket, config.raw_prefix),
         reader=S3RawReader(),
         transformer=ActivitiesTransformer(),
-        grouper=CityGrouper(),
+        grouper=CountyGrouper(),
         key_builder=TransformedKeyBuilder(config.raw_prefix, config.transformed_prefix),
         writer=S3ParquetWriter(config.aws_destination_activities_transformed_data_s3_bucket),
     )
