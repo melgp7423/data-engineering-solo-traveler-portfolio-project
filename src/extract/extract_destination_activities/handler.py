@@ -97,9 +97,9 @@ class IngestionConfig:
     places_limit: int = 300
     max_pages: int = 10
     geocode_poll_seconds: float = 10-15
-    geocode_max_wait: float = 1200
+    geocode_max_wait: float = 600
     lang: str = "en"
-    request_timeout: int = 120
+    request_timeout: int = 60
 
     @classmethod
     def from_env(cls) -> "IngestionConfig":
