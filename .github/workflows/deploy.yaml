@@ -148,14 +148,26 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
 
+      # The zip is staged in S3 rather than sent with --zip-file: direct uploads are capped at 50 MB,
+      # and lambdas that bundle pyarrow are bigger than that. Via S3 the limit is 250 MB unzipped.
       - name: Deploy to Lambda
+        env:
+          DEPLOY_BUCKET: ${{ secrets.AWS_LAMBDA_DEPLOY_ARTIFACTS_S3_BUCKET }}
         run: |
           FUNCTION_NAME="${{ fromJSON(env.FUNCTION_NAMES)[matrix.lambda] }}"
           if [ -z "$FUNCTION_NAME" ]; then
             echo "::error::No ARN for ${{ matrix.lambda }} - add its AWS_*_ARN repository secret"
             exit 1
           fi
+          if [ -z "$DEPLOY_BUCKET" ]; then
+            echo "::error::No deploy bucket - add the AWS_LAMBDA_DEPLOY_ARTIFACTS_S3_BUCKET repository secret"
+            exit 1
+          fi
+          DEPLOY_BUCKET="${DEPLOY_BUCKET##*:::}" # accept a bare bucket name or an ARN
+          S3_KEY="lambda/${{ matrix.lambda }}/${{ github.sha }}.zip"
+          aws s3 cp code.zip "s3://$DEPLOY_BUCKET/$S3_KEY"
           aws lambda update-function-code \
             --function-name "$FUNCTION_NAME" \
-            --zip-file fileb://code.zip
+            --s3-bucket "$DEPLOY_BUCKET" \
+            --s3-key "$S3_KEY"
           aws lambda wait function-updated --function-name "$FUNCTION_NAME"
