@@ -4,7 +4,7 @@ destinations found by ingest_hotel_room_rates, and land the raw JSON
 responses in S3 — OOP / Single Responsibility Principle.
 
 Docs: https://apidocs.geoapify.com/docs/places/
-      https://apidocs.geoapify.com/docs/geocoding/batch/
+      https://apidocs.geoapify.com/docs/geocoding/forward-geocoding/
 
 How it correlates with the hotels Lambda:
     1. ingest_hotel_room_rates searches hotels for each flight-deal destination
@@ -12,8 +12,10 @@ How it correlates with the hotels Lambda:
     2. This Lambda takes those destination names from the event (when chained
        in Step Functions), or else from the hotel files in TODAY's partition
        (each file's search_parameters.q).
-    3. All names are forward-geocoded to decimal-degree lat/lon in ONE batch
-       geocoding request (async job: submit, then poll until it finishes).
+    3. Each name is forward-geocoded to decimal-degree lat/lon with the
+       synchronous geocoding API, several cities at a time in parallel. (The
+       batch API was dropped: its jobs sit in a queue and can stay pending for
+       10+ minutes, which made the Lambda time out.)
     4. A square of AREA_RADIUS_METERS around each city is built, and all squares
        are sent as a single inline GeoJSON MultiPolygon filter in ONE Places
        POST request (paged with offset only if results exceed PLACES_LIMIT).
@@ -24,7 +26,7 @@ Classes and their one job:
     SecretProvider             -> fetch the API key from Secrets Manager
     QueryParamKeyAuthenticator -> add ?apiKey=... to the request
     GeoapifyClient             -> make the HTTP calls
-    BatchGeocoder              -> city names -> decimal-degree coordinates
+    CityGeocoder               -> city names -> decimal-degree coordinates
     AreaPolygonBuilder         -> coordinates -> one GeoJSON MultiPolygon
     PlacesQueryBuilder         -> build the Places POST body
     ResponseValidator          -> reject API error payloads
@@ -32,26 +34,24 @@ Classes and their one job:
     S3RawWriter                -> write bytes to S3
     IngestionService           -> orchestrate destinations -> geocode -> places -> store
     lambda_handler             -> Lambda entry point
-    test
-    
+
 Environment variables (placeholders shown):
-    GEOCODE_URL                                             = https://api.geoapify.com/v1/batch/geocode/search
+    GEOCODE_SEARCH_URL                                      = https://api.geoapify.com/v1/geocode/search
     PLACES_URL                                              = https://api.geoapify.com/v2/places
     API_KEY_SECRET                                          = prod/travelProject/geoapify   secret value = your Geoapify key
     AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET                 = bucket the hotels Lambda writes to
     HOTEL_PREFIX                                            = hotel_room_rates/
     CATEGORIES                                              = tourism,entertainment,leisure,catering.restaurant,beach,natural
-    AREA_RADIUS_METERS                                      = 10000  half the side of the square searched around each city
-    PLACES_LIMIT                                            = 500    places per page (API max 500)
+    AREA_RADIUS_METERS                                      = 7000   half the side of the square searched around each city
+    PLACES_LIMIT                                            = 300    places per page (API max 500)
     MAX_PAGES                                               = 10     safety cap on Places pages per run
-    GEOCODE_POLL_SECONDS                                    = 3      wait between batch geocoding status checks
-    GEOCODE_MAX_WAIT                                        = 120    give up on the geocoding job after this many seconds
+    GEOCODE_CONCURRENCY                                     = 4      cities geocoded at once (free plan allows 5 requests/second)
     PLACES_LANG                                             = en     2-letter language code (not LANG, which Lambda sets itself)
     AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET           = <YOUR_RAW_BUCKET_NAME>
     RAW_PREFIX                                              = destination_activities/
-    REQUEST_TIMEOUT                                         = 60
+    REQUEST_TIMEOUT                                         = 30
 
-The Lambda timeout must cover GEOCODE_MAX_WAIT plus MAX_PAGES Places calls (e.g. 5 min).
+A normal run takes seconds; a 2-3 minute Lambda timeout leaves room for slow Places pages.
 
 Only uses libraries built into the Lambda Python runtime.
 """
@@ -65,6 +65,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Callable, Dict, List, Optional, Tuple
@@ -96,17 +97,14 @@ class IngestionConfig:
     area_radius_meters: int = 7000
     places_limit: int = 300
     max_pages: int = 10
-    geocode_poll_seconds: float = 10-15
-    geocode_max_wait: float = 600
+    geocode_concurrency: int = 4
     lang: str = "en"
-    request_timeout: int = 60
+    request_timeout: int = 30
 
     @classmethod
     def from_env(cls) -> "IngestionConfig":
         config = cls(
-            geocode_url=os.environ.get(
-                "GEOCODE_URL", "https://api.geoapify.com/v1/batch/geocode/search"
-            ),
+            geocode_url=os.environ.get("GEOCODE_SEARCH_URL", "https://api.geoapify.com/v1/geocode/search"),
             places_url=os.environ.get("PLACES_URL", "https://api.geoapify.com/v2/places"),
             api_key_secret=os.environ.get("API_KEY_SECRET", "prod/travelProject/geoapify"),
             aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "").strip(),
@@ -123,17 +121,16 @@ class IngestionConfig:
             area_radius_meters=int(os.environ.get("AREA_RADIUS_METERS", "7000")),
             places_limit=int(os.environ.get("PLACES_LIMIT", "300")),
             max_pages=int(os.environ.get("MAX_PAGES", "10")),
-            geocode_poll_seconds=float(os.environ.get("GEOCODE_POLL_SECONDS", "3")),
-            geocode_max_wait=float(os.environ.get("GEOCODE_MAX_WAIT", "600")),
+            geocode_concurrency=int(os.environ.get("GEOCODE_CONCURRENCY", "4")),
             lang=os.environ.get("PLACES_LANG", "en").strip().lower(),
-            request_timeout=int(os.environ.get("REQUEST_TIMEOUT", "60")),
+            request_timeout=int(os.environ.get("REQUEST_TIMEOUT", "30")),
         )
         config.validate()
         return config
 
     def validate(self) -> None:
         required = {
-            "GEOCODE_URL": self.geocode_url,
+            "GEOCODE_SEARCH_URL": self.geocode_url,
             "PLACES_URL": self.places_url,
             "API_KEY_SECRET": self.api_key_secret,
             "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET": self.aws_hotel_room_rates_raw_data_s3_bucket,
@@ -152,8 +149,8 @@ class IngestionConfig:
             raise ValueError("MAX_PAGES must be at least 1")
         if len(self.lang) != 2:
             raise ValueError("PLACES_LANG must be a 2-letter ISO 639-1 code, e.g. en")
-        if self.geocode_poll_seconds <= 0 or self.geocode_max_wait <= 0:
-            raise ValueError("GEOCODE_POLL_SECONDS and GEOCODE_MAX_WAIT must be positive")
+        if not 1 <= self.geocode_concurrency <= 5:
+            raise ValueError("GEOCODE_CONCURRENCY must be between 1 and 5")
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +337,7 @@ class ResponseValidator:
 # Forward geocoding (city name -> decimal-degree coordinates)
 # ---------------------------------------------------------------------------
 class GeocodingError(Exception):
-    """Raised when the batch geocoding job fails or never finishes."""
+    """Raised when a city can't be geocoded after retrying."""
 
 
 @dataclass(frozen=True)
@@ -357,13 +354,15 @@ class GeocodeResult:
     raw: bytes
 
 
-class BatchGeocoder:
+class CityGeocoder:
     """
-    Geocodes every destination in ONE batch job instead of one request per city.
-    The batch API is asynchronous: the POST returns 202 + a job id, and the
-    same URL is polled with ?id=... until it returns 200 with the results.
-    The clock and sleep are injectable so tests don't wait.
+    Geocodes each destination with one synchronous request, running up to
+    `concurrency` requests at a time. A 429 (rate limit) or 5xx is retried
+    with backoff; a city that still fails is reported in not_found instead of
+    failing the whole run. The sleep is injectable so tests don't wait.
     """
+
+    RETRY_STATUSES = {429, 500, 502, 503, 504}
 
     def __init__(
         self,
@@ -371,61 +370,55 @@ class BatchGeocoder:
         validator: ResponseValidator,
         url: str,
         lang: str,
-        poll_seconds: float,
-        max_wait: float,
+        concurrency: int = 4,
+        retries: int = 3,
         sleep: Callable[[float], None] = time.sleep,
-        clock: Callable[[], float] = time.monotonic,
     ):
         self._client = client
         self._validator = validator
         self._url = url
         self._lang = lang
-        self._poll_seconds = poll_seconds
-        self._max_wait = max_wait
+        self._concurrency = concurrency
+        self._retries = retries
         self._sleep = sleep
-        self._clock = clock
 
     def geocode(self, names: List[str]) -> GeocodeResult:
-        response = self._client.post_json(self._url, names, {"type": "city", "lang": self._lang})
-        response = self._wait_for_results(response)
-        results = self._validator.parse(response.body)
-        if not isinstance(results, list):
-            raise GeocodingError(f"Expected a list of geocoding results, got {type(results).__name__}")
-        return self._match(names, results, response.body)
+        with ThreadPoolExecutor(max_workers=min(self._concurrency, len(names)) or 1) as pool:
+            results = list(pool.map(self._geocode_one, names))
 
-    def _wait_for_results(self, response: HttpResponse) -> HttpResponse:
-        deadline = self._clock() + self._max_wait
-        while response.status == 202:
-            job = self._validator.parse(response.body)
-            job_id = job.get("id") if isinstance(job, dict) else None
-            if not job_id:
-                raise GeocodingError(f"Batch geocoding job has no id: {response.body[:200]!r}")
-            if self._clock() >= deadline:
-                raise GeocodingError(f"Batch geocoding job {job_id} not done after {self._max_wait}s")
-            self._sleep(self._poll_seconds)
-            response = self._client.get(self._url, {"id": job_id, "format": "json"})
-        return response
-
-    @staticmethod
-    def _match(names: List[str], results: List, raw: bytes) -> GeocodeResult:
-        """Results come back in request order; match on query.text first and
-        fall back to position in case the API normalizes the text."""
-        by_text = {}
-        for result in results:
-            if isinstance(result, dict):
-                text = str((result.get("query") or {}).get("text") or "").strip().lower()
-                by_text.setdefault(text, result)
-
-        found, not_found = [], []
-        for index, name in enumerate(names):
-            result = by_text.get(name.lower())
-            if result is None and index < len(results) and isinstance(results[index], dict):
-                result = results[index]
-            try:
-                found.append(GeocodedDestination(name, float(result["lat"]), float(result["lon"])))
-            except (TypeError, KeyError, ValueError):
+        found, not_found, raw = [], [], []
+        for name, (destination, payload) in zip(names, results):
+            raw.append({"query": {"text": name}, "response": payload})
+            if destination is None:
                 not_found.append(name)
-        return GeocodeResult(found, not_found, raw)
+            else:
+                found.append(destination)
+        return GeocodeResult(found, not_found, json.dumps(raw).encode("utf-8"))
+
+    def _geocode_one(self, name: str) -> Tuple[Optional[GeocodedDestination], object]:
+        try:
+            payload = self._validator.parse(self._fetch(name))
+        except (GeocodingError, ApiResponseError, urllib.error.URLError) as err:
+            logger.warning("Geocoding %r failed: %s", name, err)
+            return None, {"error": str(err)}
+
+        results = payload.get("results") if isinstance(payload, dict) else None
+        try:
+            best = results[0]
+            return GeocodedDestination(name, float(best["lat"]), float(best["lon"])), payload
+        except (TypeError, IndexError, KeyError, ValueError):
+            return None, payload
+
+    def _fetch(self, name: str) -> bytes:
+        params = {"text": name, "type": "city", "lang": self._lang, "limit": "1", "format": "json"}
+        for attempt in range(self._retries + 1):
+            try:
+                return self._client.get(self._url, params).body
+            except urllib.error.HTTPError as err:
+                if err.code not in self.RETRY_STATUSES or attempt == self._retries:
+                    raise GeocodingError(f"HTTP {err.code}") from err
+                self._sleep(2 ** attempt)
+        raise GeocodingError("unreachable")
 
 
 # ---------------------------------------------------------------------------
@@ -588,7 +581,7 @@ class IngestionService:
 
     def __init__(
         self,
-        geocoder: BatchGeocoder,
+        geocoder: CityGeocoder,
         area_builder: AreaPolygonBuilder,
         query_builder: PlacesQueryBuilder,
         client: GeoapifyClient,
@@ -665,9 +658,8 @@ def build_service(config: IngestionConfig) -> IngestionService:
     )
     validator = ResponseValidator()
     return IngestionService(
-        geocoder=BatchGeocoder(
-            client, validator, config.geocode_url, config.lang,
-            config.geocode_poll_seconds, config.geocode_max_wait,
+        geocoder=CityGeocoder(
+            client, validator, config.geocode_url, config.lang, config.geocode_concurrency,
         ),
         area_builder=AreaPolygonBuilder(config.area_radius_meters),
         query_builder=PlacesQueryBuilder(config),
