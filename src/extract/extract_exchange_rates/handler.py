@@ -1,33 +1,36 @@
 """
-Lambda: ingest exchange rates from exchangeratesapi.io (apilayer) and land the
-raw JSON response in S3 — OOP / Single Responsibility Principle.
+Lambda: ingest exchange rates from freecurrencyapi.com and land the raw JSON
+response in S3 — OOP / Single Responsibility Principle.
 
 Classes and their one job:
     IngestionConfig          -> read & validate settings
-    SecretProvider           -> fetch the access key from Secrets Manager
-    QueryParamKeyAuthenticator -> add ?access_key=... to the request
+    SecretProvider           -> fetch the API key from Secrets Manager
+    HeaderKeyAuthenticator   -> add the "apikey" header to the request
     ExchangeRatesClient      -> make the HTTP call
-    ResponseValidator        -> reject API error payloads (the API returns
-                                errors as {"success": false, ...})
+    ResponseValidator        -> reject payloads without a "data" rates map
     RawObjectKeyBuilder      -> name the S3 object
     S3RawWriter              -> write bytes to S3
     IngestionService         -> orchestrate fetch -> validate -> store
     lambda_handler           -> Lambda entry point
 
-NOTE: the docs sample calls docs.apilayer.com/.../proxy/... — that's the
-documentation "try it" proxy. Production code calls the API directly:
-    https://api.exchangeratesapi.io/v1/<endpoint>
+API docs: https://freecurrencyapi.com/docs/
+    GET https://api.freecurrencyapi.com/v1/latest?base_currency=USD&currencies=CAD,MXN,USD
+    -> {"data": {"CAD": 1.4257001775, "MXN": 18.3700024185, "USD": 1}}
+
+The key can be sent as ?apikey=... or an "apikey" header; the header is used
+(recommended by the docs) so the key never appears in URLs or access logs.
+Errors come back as non-2xx statuses (401 bad key, 422 validation, 429 quota)
+with {"message": ..., "errors"?: {...}}.
 
 Environment variables (placeholders shown):
-    API_BASE_URL      = https://api.exchangeratesapi.io/v1   (try http:// if your plan lacks HTTPS)
-    API_ENDPOINT      = latest            latest | YYYY-MM-DD (historical)
-    ACCESS_KEY_SECRET = <SECRETS_MANAGER_SECRET_ID>   secret value = your access key
-    BASE_CURRENCY     = <OPTIONAL e.g. EUR>   free plan supports EUR only
-    SYMBOLS           = <OPTIONAL e.g. USD,GBP,JPY>   blank = all currencies
+    API_BASE_URL      = https://api.freecurrencyapi.com/v1
+    API_ENDPOINT      = latest
+    ACCESS_KEY_SECRET = <SECRETS_MANAGER_SECRET_ID>   secret value = your freecurrencyapi key
+    BASE_CURRENCY     = USD
+    CURRENCIES        = CAD,MXN,USD
     RAW_BUCKET        = <YOUR_RAW_BUCKET_NAME>
     RAW_PREFIX        = exchange_rates/
     REQUEST_TIMEOUT   = 30
-    test
 
 Only uses libraries built into the Lambda Python runtime.
 """
@@ -61,20 +64,20 @@ class IngestionConfig:
     access_key_secret: str
     raw_bucket: str
     raw_prefix: str
-    base_currency: str = ""
-    symbols: str = ""
+    base_currency: str = "USD"
+    currencies: str = "CAD,MXN,USD"
     request_timeout: int = 30
 
     @classmethod
     def from_env(cls) -> "IngestionConfig":
         config = cls(
-            api_base_url=os.environ.get("API_BASE_URL", "https://api.exchangeratesapi.io/v1"),
+            api_base_url=os.environ.get("API_BASE_URL", "https://api.freecurrencyapi.com/v1"),
             api_endpoint=os.environ.get("API_ENDPOINT", "latest"),
-            access_key_secret=os.environ.get("ACCESS_KEY_SECRET", "prod/travelProject/exchangeRates"),
-            raw_bucket=os.environ.get("RAW_BUCKET", "exchange-rates-bucket-raw-data-075996947402-us-east-2-an"),
-            raw_prefix=os.environ.get("RAW_PREFIX", "exchange_rates/"),
-            base_currency=os.environ.get("BASE_CURRENCY", "").strip().upper(),
-            symbols=os.environ.get("SYMBOLS", "").replace(" ", "").upper(),
+            access_key_secret=os.environ.get("ACCESS_KEY_SECRET", "prod/travelProject/exchangeRatesApi"),
+            raw_bucket=os.environ.get("RAW_BUCKET", "").strip(),
+            raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
+            base_currency=os.environ.get("BASE_CURRENCY", "USD").strip().upper(),
+            currencies=os.environ.get("CURRENCIES", "CAD,MXN,USD").replace(" ", "").upper(),
             request_timeout=int(os.environ.get("REQUEST_TIMEOUT", "30")),
         )
         config.validate()
@@ -98,7 +101,7 @@ class IngestionConfig:
     @property
     def query_params(self) -> Dict[str, str]:
         """Optional filters; empty values are left out."""
-        params = {"base": self.base_currency, "symbols": self.symbols}
+        params = {"base_currency": self.base_currency, "currencies": self.currencies}
         return {k: v for k, v in params.items() if v}
 
 
@@ -122,7 +125,7 @@ class SecretProvider:
     @staticmethod
     def _extract_key(raw: str) -> str:
         """Secrets Manager can store either a plain string or a JSON
-        key/value pair (e.g. {"access_key": "..."}) depending on how the
+        key/value pair (e.g. {"apikey": "..."}) depending on how the
         secret was created in the console. Support both."""
         if raw.startswith("{"):
             try:
@@ -131,23 +134,25 @@ class SecretProvider:
                 return raw
             if isinstance(parsed, dict) and len(parsed) == 1:
                 return next(iter(parsed.values())).strip()
-            if isinstance(parsed, dict) and "access_key" in parsed:
-                return parsed["access_key"].strip()
+            if isinstance(parsed, dict):
+                for name in ("apikey", "api_key", "access_key"):
+                    if name in parsed:
+                        return parsed[name].strip()
         return raw
 
 
 # ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------
-class QueryParamKeyAuthenticator:
-    """apilayer APIs authenticate with ?access_key=<key> on every request."""
+class HeaderKeyAuthenticator:
+    """freecurrencyapi authenticates with an "apikey" header on every request."""
 
-    def __init__(self, secrets: SecretProvider, param_name: str = "access_key"):
+    def __init__(self, secrets: SecretProvider, header_name: str = "apikey"):
         self._secrets = secrets
-        self._param_name = param_name
+        self._header_name = header_name
 
-    def apply(self, params: Dict[str, str]) -> Dict[str, str]:
-        return {**params, self._param_name: self._secrets.get()}
+    def apply(self, headers: Dict[str, str]) -> Dict[str, str]:
+        return {**headers, self._header_name: self._secrets.get()}
 
 
 # ---------------------------------------------------------------------------
@@ -158,17 +163,19 @@ class ExchangeRatesClient:
 
     HEADERS = {"Accept": "application/json"}
 
-    def __init__(self, endpoint_url: str, authenticator: QueryParamKeyAuthenticator, timeout: int):
+    def __init__(self, endpoint_url: str, authenticator: HeaderKeyAuthenticator, timeout: int):
         self._endpoint_url = endpoint_url
         self._authenticator = authenticator
         self._timeout = timeout
 
     def fetch(self, params: Dict[str, str]) -> bytes:
-        query = urllib.parse.urlencode(self._authenticator.apply(params))
+        query = urllib.parse.urlencode(params)
         request = urllib.request.Request(
-            f"{self._endpoint_url}?{query}", headers=self.HEADERS, method="GET"
+            f"{self._endpoint_url}?{query}",
+            headers=self._authenticator.apply(self.HEADERS),
+            method="GET",
         )
-        # Log the URL WITHOUT the query string so the access key never hits CloudWatch.
+        # The key travels in a header, never the URL, so it never hits CloudWatch.
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = response.read()
@@ -191,9 +198,9 @@ class ApiResponseError(Exception):
 
 class ResponseValidator:
     """
-    exchangeratesapi.io can return HTTP 200 with {"success": false, "error": {...}}
-    (e.g. bad key, quota exceeded, feature not on plan). Catch that so bad
-    data never lands in the raw bucket and the Lambda/Step Function fails loudly.
+    freecurrencyapi signals errors with non-2xx statuses (raised by the client),
+    but still check the 200 body has a non-empty {"data": {CODE: rate}} map so
+    bad data never lands in the raw bucket and the Lambda/Step Function fails loudly.
     """
 
     def validate(self, body: bytes) -> Dict:
@@ -202,13 +209,13 @@ class ResponseValidator:
         except ValueError as err:
             raise ApiResponseError(f"Response is not valid JSON: {body[:200]!r}") from err
 
-        if not payload.get("success", False):
-            error = payload.get("error", {})
-            raise ApiResponseError(
-                f"API error {error.get('code')} ({error.get('type')}): {error.get('info')}"
-            )
-        if "rates" not in payload:
-            raise ApiResponseError("Response has no 'rates' field")
+        if not isinstance(payload, dict):
+            raise ApiResponseError(f"Unexpected response shape: {body[:200]!r}")
+        if "message" in payload and "data" not in payload:
+            raise ApiResponseError(f"API error: {payload.get('message')} {payload.get('errors', '')}".strip())
+        rates = payload.get("data")
+        if not isinstance(rates, dict) or not rates:
+            raise ApiResponseError("Response has no 'data' rates")
         return payload
 
 
@@ -226,12 +233,14 @@ class IngestionRun:
 class RawObjectKeyBuilder:
     """Builds Hive-style partitioned keys for Glue/Athena."""
 
-    def __init__(self, prefix: str):
+    def __init__(self, prefix: str, base_currency: str):
         self._prefix = prefix.rstrip("/")
+        self._base_currency = base_currency or "UNKNOWN"
 
-    def build(self, run: IngestionRun, payload: Dict) -> str:
-        rate_date = payload.get("date", f"{run.started_at:%Y-%m-%d}")
-        base = payload.get("base", "UNKNOWN")
+    def build(self, run: IngestionRun) -> str:
+        # The API response carries no date or base, so use the run time and config.
+        rate_date = f"{run.started_at:%Y-%m-%d}"
+        base = self._base_currency
         return (
             f"{self._prefix}/ingest_date={run.started_at:%Y-%m-%d}/"
             f"rates_{base}_{rate_date}_{run.started_at:%H%M%S}_{run.run_id}.json"
@@ -282,18 +291,19 @@ class IngestionService:
 
     def run(self, overrides: Optional[Dict[str, str]] = None) -> Dict[str, object]:
         run = IngestionRun()
-        body = self._client.fetch({**self._default_params, **(overrides or {})})
+        params = {**self._default_params, **(overrides or {})}
+        body = self._client.fetch(params)
         payload = self._validator.validate(body)
-        key = self._writer.write(self._key_builder.build(run, payload), body)
+        key = self._writer.write(self._key_builder.build(run), body)
 
-        logger.info("Wrote %d rates to s3://%s/%s", len(payload["rates"]), self._writer.bucket, key)
+        logger.info("Wrote %d rates to s3://%s/%s", len(payload["data"]), self._writer.bucket, key)
         return {
             "status": "SUCCEEDED",
             "bucket": self._writer.bucket,
             "key": key,
-            "base": payload.get("base"),
-            "rate_date": payload.get("date"),
-            "rate_count": len(payload["rates"]),
+            "base": params.get("base_currency"),
+            "rate_date": f"{run.started_at:%Y-%m-%d}",
+            "rate_count": len(payload["data"]),
             "run_id": run.run_id,
             "ingest_date": f"{run.started_at:%Y-%m-%d}",
         }
@@ -304,11 +314,11 @@ def build_service(config: IngestionConfig) -> IngestionService:
     return IngestionService(
         client=ExchangeRatesClient(
             config.endpoint_url,
-            QueryParamKeyAuthenticator(SecretProvider(config.access_key_secret)),
+            HeaderKeyAuthenticator(SecretProvider(config.access_key_secret)),
             config.request_timeout,
         ),
         validator=ResponseValidator(),
-        key_builder=RawObjectKeyBuilder(config.raw_prefix),
+        key_builder=RawObjectKeyBuilder(config.raw_prefix, config.base_currency),
         writer=S3RawWriter(config.raw_bucket),
         default_params=config.query_params,
     )
@@ -322,6 +332,6 @@ def lambda_handler(event, context):
     if _service is None:
         _service = build_service(IngestionConfig.from_env())
 
-    # Optional per-run overrides from Step Functions, e.g. {"query_params": {"symbols": "USD,GBP"}}
+    # Optional per-run overrides from Step Functions, e.g. {"query_params": {"currencies": "CAD,MXN"}}
     overrides = event.get("query_params", {}) if isinstance(event, dict) else {}
     return _service.run(overrides)
