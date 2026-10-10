@@ -5,8 +5,8 @@ group them by county, and write one Parquet file per county back to S3 —
 OOP / Single Responsibility Principle.
 
 Input  (raw bucket):         <RAW_PREFIX>ingest_date=YYYY-MM-DD/places_HHMMSS_<run>_page000.json   (one or more pages per run)
-Output (transformed bucket): <TRANSFORMED_PREFIX>ingest_date=YYYY-MM-DD/activities-wayne_county-detroit-michigan.parquet
-                             (activities-COUNTY-CITY-STATE, one per county + city + state)
+Output (transformed bucket): <TRANSFORMED_PREFIX>ingest_date=YYYY-MM-DD/activities-wayne_county-michigan.parquet
+                             (activities-COUNTY-STATE, one per county + state; may hold several cities)
 
 The geocode_*.json files in the same partition are ignored.
 
@@ -25,7 +25,7 @@ Classes and their one job:
     RawObjectLocator           -> work out which raw S3 objects to transform from the event
     S3RawReader                -> read the raw JSON from S3
     ActivitiesTransformer      -> raw payload -> list of clean activity rows
-    CountyGrouper              -> rows -> one pyarrow Table per county + city + state
+    CountyGrouper              -> rows -> one pyarrow Table per county + state
     TransformedKeyBuilder      -> name the Parquet object
     S3ParquetWriter            -> serialize the Table to Parquet and write it to S3
     TransformService           -> orchestrate locate -> read -> transform -> group -> name -> store
@@ -279,8 +279,9 @@ class ActivitiesTransformer:
 
 class CountyGrouper:
     """
-    Groups rows by (partition, county, city, state) and builds one Table per
-    group, matching the activities-COUNTY-CITY-STATE file name. The
+    Groups rows by (partition, county, state) and builds one Table per group,
+    matching the activities-COUNTY-STATE file name. State is part of the key
+    because county names repeat across states (e.g. "Washington County"). The
     partition is the raw key's folder (e.g. "ingest_date=2026-10-09"), so
     pages from different days never end up in the same file. The same place
     showing up on two pages or in two runs that day is only kept once.
@@ -291,12 +292,12 @@ class CountyGrouper:
 
     def group(
         self, rows_by_partition: Dict[str, List[Dict[str, object]]]
-    ) -> Dict[Tuple[str, str, str, str], pa.Table]:
-        grouped: Dict[Tuple[str, str, str, str], List[Dict[str, object]]] = defaultdict(list)
+    ) -> Dict[Tuple[str, str, str], pa.Table]:
+        grouped: Dict[Tuple[str, str, str], List[Dict[str, object]]] = defaultdict(list)
         seen = set()
         for partition, rows in rows_by_partition.items():
             for row in rows:
-                group_key = (partition, row["county"], row["city"], row["state"])
+                group_key = (partition, row["county"], row["state"])
                 identity = (*group_key, row["name"], row["formatted"])
                 if identity in seen:
                     continue
@@ -315,11 +316,11 @@ class CountyGrouper:
 class TransformedKeyBuilder:
     """
     Puts each county's file in the same ingest_date= partition as its raw
-    pages, under the transformed prefix, named activities-COUNTY-CITY-STATE.
+    pages, under the transformed prefix, named activities-COUNTY-STATE.
     "-" separates the parts, so spaces and punctuation inside a part become "_":
         ingest_date=2026-10-09/places_021651_fde87987_page000.json
-        (county "Wayne County", city "Detroit", state "Michigan")
-     -> ingest_date=2026-10-09/activities-wayne_county-detroit-michigan.parquet
+        (county "Wayne County", state "Michigan")
+     -> ingest_date=2026-10-09/activities-wayne_county-michigan.parquet
     """
 
     def __init__(self, raw_prefix: str, transformed_prefix: str):
@@ -330,9 +331,9 @@ class TransformedKeyBuilder:
         relative = raw_key[len(self._raw_prefix):] if raw_key.startswith(self._raw_prefix) else raw_key
         return posixpath.dirname(relative)
 
-    def build(self, partition: str, county: str, city: str, state: str) -> str:
+    def build(self, partition: str, county: str, state: str) -> str:
         folder = f"{partition}/" if partition else ""
-        name = "-".join(self._slug(part) for part in (county, city, state))
+        name = "-".join(self._slug(part) for part in (county, state))
         return f"{self._transformed_prefix}{folder}activities-{name}.parquet"
 
     @staticmethod
@@ -416,15 +417,14 @@ class TransformService:
             raise TransformError(f"No complete activities found in {read}")
 
         written = []
-        for (partition, county, city, state), table in tables.items():
-            key = self._writer.write(self._key_builder.build(partition, county, city, state), table)
+        for (partition, county, state), table in tables.items():
+            key = self._writer.write(self._key_builder.build(partition, county, state), table)
             logger.info(
-                "Wrote %d activities for %s, %s, %s to s3://%s/%s",
-                table.num_rows, county, city, state, self._writer.bucket, key,
+                "Wrote %d activities for %s, %s to s3://%s/%s",
+                table.num_rows, county, state, self._writer.bucket, key,
             )
             written.append({
                 "county": county,
-                "city": city,
                 "state": state,
                 "key": key,
                 "row_count": table.num_rows,
