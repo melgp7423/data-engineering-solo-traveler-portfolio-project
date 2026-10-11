@@ -39,7 +39,7 @@ The pipeline follows the **medallion architecture**: data moves through 3 layers
 | **Silver** | Each source cleaned & standardized on its own (one S3 bucket per source + one combined S3 data bucket) | Parquet |
 | **Gold**   | All sources combined into one analytics-ready dataset (a single Aurora Serverless cluster)             | Parquet |
 
-Every layer is partitioned by `ingest_date=YYYY-MM-DD/`.
+Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
 ```
              EventBridge (daily schedule)    API Gateway
@@ -64,6 +64,18 @@ Every layer is partitioned by `ingest_date=YYYY-MM-DD/`.
  │   exchange_rates/   airplane_ticket_rates/   hotel_room_rates/               │
  │   destination_activities/                                                    │
  └──────────────────────────────────────────────────────────────────────────────┘
+                                     │
+ ── CATALOG ─────────────────────────┼─────────────────────────────────────────────
+                                     │
+                  Glue Crawler: crawl the bronze raw buckets
+                                     │
+                                     ▼
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │ GLUE DATA CATALOG   raw database, one table per bronze source                │
+ │   schemas + extract_date partitions registered                                │
+ └──────────────────────────────────────────────────────────────────────────────┘
+                                     │
+          ┌────────────────┬─────────┴───────────┬──────────────────────┐
           │                │                     │                      │
  ── TRANSFORM ─────────────┼─────────────────────┼──────────────────────┼─────────
           │                │                     │                      │
@@ -104,7 +116,8 @@ Every layer is partitioned by `ingest_date=YYYY-MM-DD/`.
 4. **Extract → Bronze.** The extract Lambdas call each API and write the raw JSON responses to the bronze S3 buckets.
    - Exchange rates run on their own.
    - Airplane ticket rates, hotel room rates and destination activities run in a chain: the hotels Lambda searches the destinations from the flight deals, and the activities Lambda searches the destinations from the hotels.
-5. **Transform → Silver.** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans them (for example, filling missing values and standardizing types), and writes the result as **Parquet** to that source's silver bucket.
+5. **Catalog.** Once extraction finishes, a **Glue Crawler** crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the **Glue Data Catalog**, so the raw data can be discovered and queried before it is transformed.
+6. **Transform → Silver.** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans them (for example, filling missing values and standardizing types), and writes the result as **Parquet** to that source's silver bucket.
    - Exchange rates
    - Airplane ticket rates
    - Hotel room rates
@@ -112,9 +125,9 @@ Every layer is partitioned by `ingest_date=YYYY-MM-DD/`.
 
    A final transform Lambda joins the four silver datasets (converting prices with the exchange rates) into one combined **Parquet** dataset.
 
-6. **Load → Gold.** A load Lambda reads the combined **Parquet** dataset from the S3 combined bucket and writes it into the gold layer, an **Amazon Aurora Serverless** cluster. This gives downstream analytics one curated, query-ready table of flight, hotel, destination activities and currency-converted price data for each travel location. Aurora Serverless scales capacity up and down with the daily load.
-7. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
-8. **Amazon Quick Suite** visualizes the results.
+7. **Load → Gold.** A load Lambda reads the combined **Parquet** dataset from the S3 combined bucket and writes it into the gold layer, an **Amazon Aurora Serverless** cluster. This gives downstream analytics one curated, query-ready table of flight, hotel, destination activities and currency-converted price data for each travel location. Aurora Serverless scales capacity up and down with the daily load.
+8. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
+9. **Amazon Quick Suite** visualizes the results.
 
 ## CI/CD Pipeline
 
