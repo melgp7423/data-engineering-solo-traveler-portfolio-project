@@ -17,7 +17,8 @@ Classes and their one job:
     S3RawWriter              -> write bytes to S3
     IngestionService         -> orchestrate build query -> fetch -> validate -> store
     lambda_handler           -> Lambda entry point
-
+    test
+    
 Environment variables (placeholders shown):
     API_URL                                         = https://serpapi.com/search.json
     API_KEY_SECRET                                  = <SECRETS_MANAGER_SECRET_ID>   secret value = your SerpApi key
