@@ -1,13 +1,12 @@
 """
-Lambda: ingest Google Hotels results from SerpApi for the destinations found
-by ingest_airplane_ticket_rates, and land each raw JSON response in S3 —
-OOP / Single Responsibility Principle.
+Lambda: Extract Google Hotels results from SerpApi for the destinations found
+by extract_airplane_ticket_rates and land each raw JSON response in S3
 
 Docs: https://serpapi.com/google-hotels-api
 
 How it correlates with the flights Lambda:
-    1. ingest_airplane_ticket_rates writes today's PHX flight deals to
-       s3://<FLIGHT_DEALS_BUCKET>/airplane_ticket_rates/ingest_date=YYYY-MM-DD/...
+    1. extract_airplane_ticket_rates writes today's PHX flight deals to
+       s3://<FLIGHT_DEALS_BUCKET>/airplane_ticket_rates/extract_date=YYYY-MM-DD/...
     2. This Lambda reads that file. It uses the S3 key passed in the event
        (the flights Lambda's output, when chained in Step Functions), or else
        the newest file in TODAY's partition. It never falls back to an older
@@ -16,7 +15,7 @@ How it correlates with the flights Lambda:
        of one hotel search. MAX_DESTINATIONS caps the number of searches.
 
 Classes and their one job:
-    IngestionConfig            -> read & validate settings
+    ExtractConfig              -> read & validate settings
     StayDatesCalculator        -> compute check-in / check-out (today + N days)
     FlightDealsLocator         -> find which flight-deals S3 object to use
     FlightDealsReader          -> load and parse that object
@@ -28,9 +27,8 @@ Classes and their one job:
     ResponseValidator          -> reject API error payloads
     RawObjectKeyBuilder        -> name the S3 object
     S3RawWriter                -> write bytes to S3
-    IngestionService           -> orchestrate read deals -> search each destination -> store
+    ExtractService             -> orchestrate read deals -> search each destination -> store
     lambda_handler             -> Lambda entry point
-    test
 
 Environment variables (placeholders shown):
     API_URL                                             = https://serpapi.com/search.json
@@ -43,13 +41,9 @@ Environment variables (placeholders shown):
     ADULTS                                              = 1
     HOTEL_CLASS                                         = 3,4,5
     CURRENCY                                            = USD
-    AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET            = <YOUR_RAW_BUCKET_NAME>
+    AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET             = <YOUR_RAW_BUCKET_NAME>
     RAW_PREFIX                                          = hotel_room_rates/
     REQUEST_TIMEOUT                                     = 60
-
-The Lambda timeout must cover MAX_DESTINATIONS sequential API calls (e.g. 5 min).
-
-Only uses libraries built into the Lambda Python runtime.
 """
 
 import json
@@ -70,12 +64,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class IngestionConfig:
-    """Holds and validates all runtime settings."""
+class ExtractConfig:
 
     api_url: str
     api_key_secret: str
@@ -91,16 +82,22 @@ class IngestionConfig:
     currency: str = "USD"
     request_timeout: int = 60
 
-    @classmethod 
-    def from_env(cls) -> "IngestionConfig":
+    @classmethod
+    def from_env(cls) -> "ExtractConfig":
         config = cls(
             api_url=os.environ.get("API_URL", "https://serpapi.com/search.json"),
-            api_key_secret=os.environ.get("API_KEY_SECRET", "prod/travelProject/serpApi"),
+            api_key_secret=os.environ.get(
+                "API_KEY_SECRET", "prod/travelProject/serpApi"
+            ),
             aws_airplane_ticket_raw_data_s3_bucket=os.environ.get(
                 "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", ""
             ).strip(),
-            flight_deals_prefix=os.environ.get("FLIGHT_DEALS_PREFIX", "airplane_ticket_rates/"),
-            aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "").strip(),
+            flight_deals_prefix=os.environ.get(
+                "FLIGHT_DEALS_PREFIX", "airplane_ticket_rates/"
+            ),
+            aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get(
+                "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", ""
+            ).strip(),
             raw_prefix=os.environ.get("RAW_PREFIX", "hotel_room_rates/"),
             max_destinations=int(os.environ.get("MAX_DESTINATIONS", "50")),
             check_in_offset_days=int(os.environ.get("CHECK_IN_OFFSET_DAYS", "7")),
@@ -122,9 +119,13 @@ class IngestionConfig:
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
         if not re.fullmatch(r"[2-5](,[2-5])*", self.hotel_class):
-            raise ValueError("HOTEL_CLASS must be comma-separated values from 2-5, e.g. 3,4,5")
+            raise ValueError(
+                "HOTEL_CLASS must be comma-separated values from 2-5, e.g. 3,4,5"
+            )
         if self.adults < 1:
             raise ValueError("ADULTS must be at least 1")
         if self.max_destinations < 1:
@@ -133,9 +134,7 @@ class IngestionConfig:
             raise ValueError("Need 0 <= CHECK_IN_OFFSET_DAYS < CHECK_OUT_OFFSET_DAYS")
 
 
-# ---------------------------------------------------------------------------
 # Stay dates
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class StayDates:
     check_in: date
@@ -143,10 +142,12 @@ class StayDates:
 
 
 class StayDatesCalculator:
-    """Computes check-in / check-out relative to today. The clock is
-    injectable so tests can pin 'today'."""
-
-    def __init__(self, check_in_offset: int, check_out_offset: int, today: Callable[[], date] = None):
+    def __init__(
+        self,
+        check_in_offset: int,
+        check_out_offset: int,
+        today: Callable[[], date] = None,
+    ):
         self._check_in_offset = check_in_offset
         self._check_out_offset = check_out_offset
         self._today = today or (lambda: datetime.now(timezone.utc).date())
@@ -159,9 +160,7 @@ class StayDatesCalculator:
         )
 
 
-# ---------------------------------------------------------------------------
-# Flight deals (input from ingest_airplane_ticket_rates)
-# ---------------------------------------------------------------------------
+# Flight deals (input from extract_airplane_ticket_rates)
 class FlightDealsNotFoundError(Exception):
     """Raised when there is no flight-deals file to correlate with."""
 
@@ -179,11 +178,13 @@ class FlightDealsLocator:
     """
     Decides which flight-deals object to read:
       * the bucket/key in the event (the flights Lambda's return value), or
-      * the newest .json in today's ingest_date partition.
+      * the newest .json in today's extract_date partition.
     Older partitions are deliberately ignored so stale destinations are never used.
     """
 
-    def __init__(self, bucket: str, prefix: str, client=None, today: Callable[[], date] = None):
+    def __init__(
+        self, bucket: str, prefix: str, client=None, today: Callable[[], date] = None
+    ):
         self._bucket = bucket
         self._prefix = prefix.rstrip("/")
         self._client = client or boto3.client("s3")
@@ -195,7 +196,7 @@ class FlightDealsLocator:
         return self._latest_from_today()
 
     def _latest_from_today(self) -> S3Location:
-        partition = f"{self._prefix}/ingest_date={self._today():%Y-%m-%d}/"
+        partition = f"{self._prefix}/extract_date={self._today():%Y-%m-%d}/"
         latest = None
         paginator = self._client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self._bucket, Prefix=partition):
@@ -207,19 +208,19 @@ class FlightDealsLocator:
         if latest is None:
             raise FlightDealsNotFoundError(
                 f"No flight deals in s3://{self._bucket}/{partition} — "
-                "run ingest_airplane_ticket_rates first"
+                "run extract_airplane_ticket_rates first"
             )
         return S3Location(self._bucket, latest["Key"])
 
 
 class FlightDealsReader:
-    """Loads a flight-deals object from S3 and parses it."""
-
     def __init__(self, client=None):
         self._client = client or boto3.client("s3")
 
     def read(self, location: S3Location) -> Dict:
-        body = self._client.get_object(Bucket=location.bucket, Key=location.key)["Body"].read()
+        body = self._client.get_object(Bucket=location.bucket, Key=location.key)[
+            "Body"
+        ].read()
         try:
             payload = json.loads(body)
         except ValueError as err:
@@ -248,9 +249,6 @@ class Destination:
 
 
 class DestinationExtractor:
-    """Turns the flight deals into unique destinations, in the API's order,
-    capped at max_destinations."""
-
     def __init__(self, max_destinations: int):
         self._max = max_destinations
 
@@ -263,7 +261,9 @@ class DestinationExtractor:
             destination = Destination(
                 name=str(deal["name"]).strip(),
                 country=str(deal.get("country") or "").strip(),
-                airport_code=str(deal.get("arrival_airport_code") or "").strip().upper(),
+                airport_code=str(deal.get("arrival_airport_code") or "")
+                .strip()
+                .upper(),
                 destination_id=str(deal.get("destination_id") or "").strip(),
             )
             identity = destination.destination_id or destination.search_query.lower()
@@ -276,15 +276,11 @@ class DestinationExtractor:
         return destinations
 
 
-# ---------------------------------------------------------------------------
 # Query parameters
-# ---------------------------------------------------------------------------
 class HotelQueryBuilder:
-    """Builds the SerpApi Google Hotels query for one destination."""
-
     ENGINE = "google_hotels"
 
-    def __init__(self, config: IngestionConfig):
+    def __init__(self, config: ExtractConfig):
         self._config = config
 
     def build(self, destination: Destination, stay: StayDates) -> Dict[str, str]:
@@ -299,12 +295,8 @@ class HotelQueryBuilder:
         }
 
 
-# ---------------------------------------------------------------------------
 # Secrets
-# ---------------------------------------------------------------------------
 class SecretProvider:
-    """Fetches (and caches) the API key from Secrets Manager."""
-
     def __init__(self, secret_id: str, client=None):
         self._secret_id = secret_id
         self._client = client or boto3.client("secretsmanager")
@@ -312,15 +304,14 @@ class SecretProvider:
 
     def get(self) -> str:
         if self._cached is None:
-            raw = self._client.get_secret_value(SecretId=self._secret_id)["SecretString"].strip()
+            raw = self._client.get_secret_value(SecretId=self._secret_id)[
+                "SecretString"
+            ].strip()
             self._cached = self._extract_key(raw)
         return self._cached
 
     @staticmethod
     def _extract_key(raw: str) -> str:
-        """Secrets Manager can store either a plain string or a JSON
-        key/value pair (e.g. {"api_key": "..."}) depending on how the
-        secret was created in the console. Support both."""
         if raw.startswith("{"):
             try:
                 parsed = json.loads(raw)
@@ -333,9 +324,7 @@ class SecretProvider:
         return raw
 
 
-# ---------------------------------------------------------------------------
 # Authentication
-# ---------------------------------------------------------------------------
 class QueryParamKeyAuthenticator:
     """SerpApi authenticates with ?api_key=<key> on every request."""
 
@@ -347,15 +336,15 @@ class QueryParamKeyAuthenticator:
         return {**params, self._param_name: self._secrets.get()}
 
 
-# ---------------------------------------------------------------------------
 # HTTP
-# ---------------------------------------------------------------------------
 class HotelSearchClient:
     """Performs the GET request and returns the raw response bytes."""
 
     HEADERS = {"Accept": "application/json"}
 
-    def __init__(self, api_url: str, authenticator: QueryParamKeyAuthenticator, timeout: int):
+    def __init__(
+        self, api_url: str, authenticator: QueryParamKeyAuthenticator, timeout: int
+    ):
         self._api_url = api_url
         self._authenticator = authenticator
         self._timeout = timeout
@@ -369,19 +358,21 @@ class HotelSearchClient:
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = response.read()
-                logger.info("GET %s -> %s (%d bytes)", self._api_url, response.status, len(body))
+                logger.info(
+                    "GET %s -> %s (%d bytes)", self._api_url, response.status, len(body)
+                )
                 return body
         except urllib.error.HTTPError as err:
-            logger.error("HTTP %s from %s: %s", err.code, self._api_url, err.read()[:500])
+            logger.error(
+                "HTTP %s from %s: %s", err.code, self._api_url, err.read()[:500]
+            )
             raise
         except urllib.error.URLError as err:
             logger.error("Could not reach %s: %s", self._api_url, err.reason)
             raise
 
 
-# ---------------------------------------------------------------------------
 # Validation
-# ---------------------------------------------------------------------------
 class ApiResponseError(Exception):
     """Raised when the API returns an error payload."""
 
@@ -397,10 +388,14 @@ class ResponseValidator:
         try:
             payload = json.loads(body)
         except ValueError as err:
-            raise ApiResponseError(f"Response is not valid JSON: {body[:200]!r}") from err
+            raise ApiResponseError(
+                f"Response is not valid JSON: {body[:200]!r}"
+            ) from err
 
         if not isinstance(payload, dict):
-            raise ApiResponseError(f"Expected a JSON object, got {type(payload).__name__}")
+            raise ApiResponseError(
+                f"Expected a JSON object, got {type(payload).__name__}"
+            )
         if "error" in payload:
             raise ApiResponseError(f"API error: {payload['error']}")
         metadata = payload.get("search_metadata")
@@ -410,13 +405,9 @@ class ResponseValidator:
         return payload
 
 
-# ---------------------------------------------------------------------------
 # S3 storage
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class IngestionRun:
-    """Identifies one execution."""
-
+class ExtractRun:
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -427,17 +418,15 @@ class RawObjectKeyBuilder:
     def __init__(self, prefix: str):
         self._prefix = prefix.rstrip("/")
 
-    def build(self, run: IngestionRun, destination: Destination, stay: StayDates) -> str:
+    def build(self, run: ExtractRun, destination: Destination, stay: StayDates) -> str:
         return (
-            f"{self._prefix}/ingest_date={run.started_at:%Y-%m-%d}/"
+            f"{self._prefix}/extract_date={run.started_at:%Y-%m-%d}/"
             f"hotels_{destination.label}_{stay.check_in:%Y-%m-%d}_{stay.check_out:%Y-%m-%d}_"
             f"{run.started_at:%H%M%S}_{run.run_id}.json"
         )
 
 
 class S3RawWriter:
-    """Writes raw bytes to S3 unchanged."""
-
     def __init__(self, bucket: str, client=None):
         self._bucket = bucket
         self._client = client or boto3.client("s3")
@@ -448,23 +437,17 @@ class S3RawWriter:
 
     def write(self, key: str, body: bytes) -> str:
         self._client.put_object(
-            Bucket=self._bucket,
-            Key=key,
-            Body=body,
-            ContentType="application/json",
-            # ServerSideEncryption="aws:kms", SSEKMSKeyId="<YOUR_KMS_KEY_ARN>",  # optional
+            Bucket=self._bucket, Key=key, Body=body, ContentType="application/json"
         )
         return key
 
 
-# ---------------------------------------------------------------------------
 # Orchestration
-# ---------------------------------------------------------------------------
-class IngestionError(Exception):
+class ExtractError(Exception):
     """Raised when every hotel search in a run failed."""
 
 
-class IngestionService:
+class ExtractService:
     """Coordinates read flight deals -> extract destinations -> search each -> store."""
 
     def __init__(
@@ -487,30 +470,43 @@ class IngestionService:
         self._key_builder = key_builder
         self._writer = writer
 
-    def run(self, source: S3Location, overrides: Optional[Dict[str, str]] = None) -> Dict[str, object]:
-        run = IngestionRun()
+    def run(
+        self, source: S3Location, overrides: Optional[Dict[str, str]] = None
+    ) -> Dict[str, object]:
+        run = ExtractRun()
         stay = self._dates.calculate()
         destinations = self._extractor.extract(self._reader.read(source))
         logger.info("Found %d destinations in %s", len(destinations), source)
 
         written, failed = [], []
         for destination in destinations:
-            params = {**self._query_builder.build(destination, stay), **(overrides or {})}
+            params = {
+                **self._query_builder.build(destination, stay),
+                **(overrides or {}),
+            }
             try:
                 body = self._client.fetch(params)
                 self._validator.validate(body)
             except (ApiResponseError, urllib.error.URLError) as err:
                 # One bad destination shouldn't throw away the others.
-                logger.error("Hotel search failed for %r: %s", destination.search_query, err)
-                failed.append({"destination": destination.search_query, "error": str(err)})
+                logger.error(
+                    "Hotel search failed for %r: %s", destination.search_query, err
+                )
+                failed.append(
+                    {"destination": destination.search_query, "error": str(err)}
+                )
                 continue
-            key = self._writer.write(self._key_builder.build(run, destination, stay), body)
+            key = self._writer.write(
+                self._key_builder.build(run, destination, stay), body
+            )
             written.append({"destination": destination.search_query, "key": key})
 
         if destinations and not written:
-            raise IngestionError(f"All {len(failed)} hotel searches failed: {failed}")
+            raise ExtractError(f"All {len(failed)} hotel searches failed: {failed}")
 
-        logger.info("Wrote %d hotel result files to s3://%s", len(written), self._writer.bucket)
+        logger.info(
+            "Wrote %d hotel result files to s3://%s", len(written), self._writer.bucket
+        )
         return {
             "status": "PARTIAL" if failed else "SUCCEEDED",
             "bucket": self._writer.bucket,
@@ -521,18 +517,22 @@ class IngestionService:
             "written": written,
             "failed": failed,
             "run_id": run.run_id,
-            "ingest_date": f"{run.started_at:%Y-%m-%d}",
+            "extract_date": f"{run.started_at:%Y-%m-%d}",
         }
 
 
-def build_locator(config: IngestionConfig) -> FlightDealsLocator:
-    return FlightDealsLocator(config.aws_airplane_ticket_raw_data_s3_bucket, config.flight_deals_prefix)
+def build_locator(config: ExtractConfig) -> FlightDealsLocator:
+    return FlightDealsLocator(
+        config.aws_airplane_ticket_raw_data_s3_bucket, config.flight_deals_prefix
+    )
 
 
-def build_service(config: IngestionConfig) -> IngestionService:
+def build_service(config: ExtractConfig) -> ExtractService:
     """Composition root: the only place that wires the pieces together."""
-    return IngestionService(
-        dates=StayDatesCalculator(config.check_in_offset_days, config.check_out_offset_days),
+    return ExtractService(
+        dates=StayDatesCalculator(
+            config.check_in_offset_days, config.check_out_offset_days
+        ),
         reader=FlightDealsReader(),
         extractor=DestinationExtractor(config.max_destinations),
         query_builder=HotelQueryBuilder(config),
@@ -548,13 +548,13 @@ def build_service(config: IngestionConfig) -> IngestionService:
 
 
 _locator: Optional[FlightDealsLocator] = None
-_service: Optional[IngestionService] = None
+_service: Optional[ExtractService] = None
 
 
 def lambda_handler(event, context):
     global _locator, _service
     if _service is None:
-        config = IngestionConfig.from_env()
+        config = ExtractConfig.from_env()
         _locator = build_locator(config)
         _service = build_service(config)
 

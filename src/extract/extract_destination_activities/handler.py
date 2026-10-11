@@ -1,13 +1,13 @@
 """
-Lambda: ingest tourist activities from the Geoapify Places API for the
-destinations found by ingest_hotel_room_rates, and land the raw JSON
-responses in S3 — OOP / Single Responsibility Principle.
+Lambda: Extract tourist activities from the Geoapify Places API for the
+destinations found by extract_hotel_room_rates, and land the raw JSON
+responses in S3
 
 Docs: https://apidocs.geoapify.com/docs/places/
       https://apidocs.geoapify.com/docs/geocoding/forward-geocoding/
 
 How it correlates with the hotels Lambda:
-    1. ingest_hotel_room_rates searches hotels for each flight-deal destination
+    1. extract_hotel_room_rates searches hotels for each flight-deal destination
        and returns {"written": [{"destination": "Cancun, Mexico", ...}, ...]}.
     2. This Lambda takes those destination names from the event (when chained
        in Step Functions), or else from the hotel files in TODAY's partition
@@ -21,7 +21,7 @@ How it correlates with the hotels Lambda:
        POST request (paged with offset only if results exceed PLACES_LIMIT).
 
 Classes and their one job:
-    IngestionConfig            -> read & validate settings
+    ExtractConfig              -> read & validate settings
     DestinationLocator         -> find the destination names to search
     SecretProvider             -> fetch the API key from Secrets Manager
     QueryParamKeyAuthenticator -> add ?apiKey=... to the request
@@ -32,7 +32,7 @@ Classes and their one job:
     ResponseValidator          -> reject API error payloads
     RawObjectKeyBuilder        -> name the S3 objects
     S3RawWriter                -> write bytes to S3
-    IngestionService           -> orchestrate destinations -> geocode -> places -> store
+    ExtractService             -> orchestrate destinations -> geocode -> places -> store
     lambda_handler             -> Lambda entry point
 
 Environment variables (placeholders shown):
@@ -51,9 +51,6 @@ Environment variables (placeholders shown):
     RAW_PREFIX                                              = destination_activities/
     REQUEST_TIMEOUT                                         = 30
 
-A normal run takes seconds; a 2-3 minute Lambda timeout leaves room for slow Places pages.
-
-Only uses libraries built into the Lambda Python runtime.
 """
 
 import json
@@ -76,12 +73,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class IngestionConfig:
-    """Holds and validates all runtime settings."""
+class ExtractConfig:
 
     geocode_url: str
     places_url: str
@@ -91,9 +85,17 @@ class IngestionConfig:
     aws_destination_activities_raw_data_s3_bucket: str
     raw_prefix: str
     categories: Tuple[str, ...] = (
-     "tourism.attraction.artwork", "tourism.attraction.artwork.mural", "tourism.attraction.viewpoint", "entertainment.culture", "heritage", "natural", "beach", "national_park", "ski"
+        "tourism.attraction.artwork",
+        "tourism.attraction.artwork.mural",
+        "tourism.attraction.viewpoint",
+        "entertainment.culture",
+        "heritage",
+        "natural",
+        "beach",
+        "national_park",
+        "ski",
     )
-    
+
     area_radius_meters: int = 7000
     places_limit: int = 300
     max_pages: int = 10
@@ -102,19 +104,30 @@ class IngestionConfig:
     request_timeout: int = 30
 
     @classmethod
-    def from_env(cls) -> "IngestionConfig":
+    def from_env(cls) -> "ExtractConfig":
         config = cls(
-            geocode_url=os.environ.get("GEOCODE_SEARCH_URL", "https://api.geoapify.com/v1/geocode/search"),
-            places_url=os.environ.get("PLACES_URL", "https://api.geoapify.com/v2/places"),
-            api_key_secret=os.environ.get("API_KEY_SECRET", "prod/travelProject/geoapify"),
-            aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "").strip(),
+            geocode_url=os.environ.get(
+                "GEOCODE_SEARCH_URL", "https://api.geoapify.com/v1/geocode/search"
+            ),
+            places_url=os.environ.get(
+                "PLACES_URL", "https://api.geoapify.com/v2/places"
+            ),
+            api_key_secret=os.environ.get(
+                "API_KEY_SECRET", "prod/travelProject/geoapify"
+            ),
+            aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get(
+                "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", ""
+            ).strip(),
             hotel_prefix=os.environ.get("HOTEL_PREFIX", "hotel_room_rates/"),
-            aws_destination_activities_raw_data_s3_bucket=os.environ.get("AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", "").strip(),
+            aws_destination_activities_raw_data_s3_bucket=os.environ.get(
+                "AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", ""
+            ).strip(),
             raw_prefix=os.environ.get("RAW_PREFIX", "destination_activities/"),
             categories=tuple(
                 c.strip()
                 for c in os.environ.get(
-                    "CATEGORIES", "tourism.attraction.artwork,tourism.attraction.artwork.mural,tourism.attraction.viewpoint,entertainment.culture,heritage,natural,beach,national_park,ski"
+                    "CATEGORIES",
+                    "tourism.attraction.artwork,tourism.attraction.artwork.mural,tourism.attraction.viewpoint,entertainment.culture,heritage,natural,beach,national_park,ski",
                 ).split(",")
                 if c.strip()
             ),
@@ -138,7 +151,9 @@ class IngestionConfig:
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
         if not 1 <= len(self.categories) <= 100:
             raise ValueError("CATEGORIES must list 1-100 Geoapify category keys")
         if not 0 < self.area_radius_meters <= 100000:
@@ -153,9 +168,7 @@ class IngestionConfig:
             raise ValueError("GEOCODE_CONCURRENCY must be between 1 and 5")
 
 
-# ---------------------------------------------------------------------------
-# Destinations (input from ingest_hotel_room_rates)
-# ---------------------------------------------------------------------------
+# Destinations (input from extract_hotel_room_rates)
 class DestinationsNotFoundError(Exception):
     """Raised when there are no hotel destinations to search around."""
 
@@ -164,12 +177,14 @@ class DestinationLocator:
     """
     Decides which destination names to search:
       * the "written" list in the event (the hotels Lambda's return value), or
-      * search_parameters.q of every hotel file in today's ingest_date partition.
+      * search_parameters.q of every hotel file in today's extract_date partition.
     Only destinations whose hotel search succeeded are used, and older
     partitions are ignored so the activities always match today's hotels.
     """
 
-    def __init__(self, bucket: str, prefix: str, client=None, today: Callable[[], date] = None):
+    def __init__(
+        self, bucket: str, prefix: str, client=None, today: Callable[[], date] = None
+    ):
         self._bucket = bucket
         self._prefix = prefix.rstrip("/")
         self._client = client or boto3.client("s3")
@@ -177,29 +192,39 @@ class DestinationLocator:
 
     def locate(self, event: Optional[Dict] = None) -> List[str]:
         if isinstance(event, dict) and isinstance(event.get("written"), list):
-            names = [item.get("destination") for item in event["written"] if isinstance(item, dict)]
+            names = [
+                item.get("destination")
+                for item in event["written"]
+                if isinstance(item, dict)
+            ]
         else:
             names = self._from_today()
         destinations = self._unique(names)
         if not destinations:
             raise DestinationsNotFoundError(
-                "No hotel destinations found — run ingest_hotel_room_rates first"
+                "No hotel destinations found — run extract_hotel_room_rates first"
             )
         return destinations
 
     def _from_today(self) -> List[str]:
-        partition = f"{self._prefix}/ingest_date={self._today():%Y-%m-%d}/"
+        partition = f"{self._prefix}/extract_date={self._today():%Y-%m-%d}/"
         names = []
         paginator = self._client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self._bucket, Prefix=partition):
             for obj in page.get("Contents", []):
                 if not obj["Key"].endswith(".json"):
                     continue
-                body = self._client.get_object(Bucket=self._bucket, Key=obj["Key"])["Body"].read()
+                body = self._client.get_object(Bucket=self._bucket, Key=obj["Key"])[
+                    "Body"
+                ].read()
                 try:
                     params = json.loads(body).get("search_parameters") or {}
                 except (ValueError, AttributeError):
-                    logger.warning("Skipping unreadable hotel file s3://%s/%s", self._bucket, obj["Key"])
+                    logger.warning(
+                        "Skipping unreadable hotel file s3://%s/%s",
+                        self._bucket,
+                        obj["Key"],
+                    )
                     continue
                 names.append(params.get("q"))
         return names
@@ -215,11 +240,8 @@ class DestinationLocator:
         return unique
 
 
-# ---------------------------------------------------------------------------
 # Secrets
-# ---------------------------------------------------------------------------
 class SecretProvider:
-    """Fetches (and caches) the API key from Secrets Manager."""
 
     def __init__(self, secret_id: str, client=None):
         self._secret_id = secret_id
@@ -228,15 +250,14 @@ class SecretProvider:
 
     def get(self) -> str:
         if self._cached is None:
-            raw = self._client.get_secret_value(SecretId=self._secret_id)["SecretString"].strip()
+            raw = self._client.get_secret_value(SecretId=self._secret_id)[
+                "SecretString"
+            ].strip()
             self._cached = self._extract_key(raw)
         return self._cached
 
     @staticmethod
     def _extract_key(raw: str) -> str:
-        """Secrets Manager can store either a plain string or a JSON
-        key/value pair (e.g. {"api_key": "..."}) depending on how the
-        secret was created in the console. Support both."""
         if raw.startswith("{"):
             try:
                 parsed = json.loads(raw)
@@ -249,11 +270,8 @@ class SecretProvider:
         return raw
 
 
-# ---------------------------------------------------------------------------
 # Authentication
-# ---------------------------------------------------------------------------
 class QueryParamKeyAuthenticator:
-    """Geoapify authenticates with ?apiKey=<key> on every request."""
 
     def __init__(self, secrets: SecretProvider, param_name: str = "apiKey"):
         self._secrets = secrets
@@ -263,9 +281,7 @@ class QueryParamKeyAuthenticator:
         return {**params, self._param_name: self._secrets.get()}
 
 
-# ---------------------------------------------------------------------------
 # HTTP
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class HttpResponse:
     status: int
@@ -273,7 +289,6 @@ class HttpResponse:
 
 
 class GeoapifyClient:
-    """Performs GET / JSON POST requests and returns the status and raw bytes."""
 
     HEADERS = {"Accept": "application/json"}
 
@@ -284,58 +299,72 @@ class GeoapifyClient:
     def get(self, url: str, params: Dict[str, str]) -> HttpResponse:
         return self._send("GET", url, params)
 
-    def post_json(self, url: str, payload, params: Optional[Dict[str, str]] = None) -> HttpResponse:
-        return self._send("POST", url, params or {}, json.dumps(payload).encode("utf-8"))
+    def post_json(
+        self, url: str, payload, params: Optional[Dict[str, str]] = None
+    ) -> HttpResponse:
+        return self._send(
+            "POST", url, params or {}, json.dumps(payload).encode("utf-8")
+        )
 
-    def _send(self, method: str, url: str, params: Dict[str, str], data: bytes = None) -> HttpResponse:
+    def _send(
+        self, method: str, url: str, params: Dict[str, str], data: bytes = None
+    ) -> HttpResponse:
         query = urllib.parse.urlencode(self._authenticator.apply(params))
-        headers = {**self.HEADERS, **({"Content-Type": "application/json"} if data else {})}
-        request = urllib.request.Request(f"{url}?{query}", data=data, headers=headers, method=method)
+        headers = {
+            **self.HEADERS,
+            **({"Content-Type": "application/json"} if data else {}),
+        }
+        request = urllib.request.Request(
+            f"{url}?{query}", data=data, headers=headers, method=method
+        )
         # Log the URL WITHOUT the query string so the API key never hits CloudWatch.
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = response.read()
-                logger.info("%s %s -> %s (%d bytes)", method, url, response.status, len(body))
+                logger.info(
+                    "%s %s -> %s (%d bytes)", method, url, response.status, len(body)
+                )
                 return HttpResponse(response.status, body)
         except urllib.error.HTTPError as err:
-            logger.error("HTTP %s from %s %s: %s", err.code, method, url, err.read()[:500])
+            logger.error(
+                "HTTP %s from %s %s: %s", err.code, method, url, err.read()[:500]
+            )
             raise
         except urllib.error.URLError as err:
             logger.error("Could not reach %s: %s", url, err.reason)
             raise
 
 
-# ---------------------------------------------------------------------------
 # Validation
-# ---------------------------------------------------------------------------
 class ApiResponseError(Exception):
     """Raised when the API returns an error payload."""
 
 
 class ResponseValidator:
-    """Geoapify reports failures as {"statusCode": ..., "error": ..., "message": ...}.
-    Catch that (and anything that isn't the expected shape) so bad data never
-    lands in the raw bucket."""
 
     def parse(self, body: bytes):
         try:
             payload = json.loads(body)
         except ValueError as err:
-            raise ApiResponseError(f"Response is not valid JSON: {body[:200]!r}") from err
+            raise ApiResponseError(
+                f"Response is not valid JSON: {body[:200]!r}"
+            ) from err
         if isinstance(payload, dict) and "error" in payload:
-            raise ApiResponseError(f"API error: {payload.get('message') or payload['error']}")
+            raise ApiResponseError(
+                f"API error: {payload.get('message') or payload['error']}"
+            )
         return payload
 
     def validate_places(self, body: bytes) -> Dict:
         payload = self.parse(body)
-        if not isinstance(payload, dict) or not isinstance(payload.get("features"), list):
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get("features"), list
+        ):
             raise ApiResponseError("Places response has no 'features' list")
         return payload
 
 
-# ---------------------------------------------------------------------------
 # Forward geocoding (city name -> decimal-degree coordinates)
-# ---------------------------------------------------------------------------
 class GeocodingError(Exception):
     """Raised when a city can't be geocoded after retrying."""
 
@@ -355,12 +384,6 @@ class GeocodeResult:
 
 
 class CityGeocoder:
-    """
-    Geocodes each destination with one synchronous request, running up to
-    `concurrency` requests at a time. A 429 (rate limit) or 5xx is retried
-    with backoff; a city that still fails is reported in not_found instead of
-    failing the whole run. The sleep is injectable so tests don't wait.
-    """
 
     RETRY_STATUSES = {429, 500, 502, 503, 504}
 
@@ -383,7 +406,9 @@ class CityGeocoder:
         self._sleep = sleep
 
     def geocode(self, names: List[str]) -> GeocodeResult:
-        with ThreadPoolExecutor(max_workers=min(self._concurrency, len(names)) or 1) as pool:
+        with ThreadPoolExecutor(
+            max_workers=min(self._concurrency, len(names)) or 1
+        ) as pool:
             results = list(pool.map(self._geocode_one, names))
 
         found, not_found, raw = [], [], []
@@ -405,25 +430,32 @@ class CityGeocoder:
         results = payload.get("results") if isinstance(payload, dict) else None
         try:
             best = results[0]
-            return GeocodedDestination(name, float(best["lat"]), float(best["lon"])), payload
+            return (
+                GeocodedDestination(name, float(best["lat"]), float(best["lon"])),
+                payload,
+            )
         except (TypeError, IndexError, KeyError, ValueError):
             return None, payload
 
     def _fetch(self, name: str) -> bytes:
-        params = {"text": name, "type": "city", "lang": self._lang, "limit": "1", "format": "json"}
+        params = {
+            "text": name,
+            "type": "city",
+            "lang": self._lang,
+            "limit": "1",
+            "format": "json",
+        }
         for attempt in range(self._retries + 1):
             try:
                 return self._client.get(self._url, params).body
             except urllib.error.HTTPError as err:
                 if err.code not in self.RETRY_STATUSES or attempt == self._retries:
                     raise GeocodingError(f"HTTP {err.code}") from err
-                self._sleep(2 ** attempt)
+                self._sleep(2**attempt)
         raise GeocodingError("unreachable")
 
 
-# ---------------------------------------------------------------------------
 # Search area (all destinations -> one inline MultiPolygon)
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class BoundingBox:
     west: float
@@ -433,21 +465,26 @@ class BoundingBox:
 
     def overlaps(self, other: "BoundingBox") -> bool:
         return not (
-            self.east < other.west or other.east < self.west
-            or self.north < other.south or other.north < self.south
+            self.east < other.west
+            or other.east < self.west
+            or self.north < other.south
+            or other.north < self.south
         )
 
     def union(self, other: "BoundingBox") -> "BoundingBox":
         return BoundingBox(
-            min(self.west, other.west), min(self.south, other.south),
-            max(self.east, other.east), max(self.north, other.north),
+            min(self.west, other.west),
+            min(self.south, other.south),
+            max(self.east, other.east),
+            max(self.north, other.north),
         )
 
     def ring(self) -> List[List[float]]:
-        """Closed, counter-clockwise GeoJSON ring of [lon, lat] positions."""
         return [
-            [self.west, self.south], [self.east, self.south],
-            [self.east, self.north], [self.west, self.north],
+            [self.west, self.south],
+            [self.east, self.south],
+            [self.east, self.north],
+            [self.west, self.north],
             [self.west, self.south],
         ]
 
@@ -470,16 +507,22 @@ class AreaPolygonBuilder:
         boxes = self._merge([self._box(d) for d in destinations])
         return {
             "type": "MultiPolygon",
-            "coordinates": [[[[round(v, 6) for v in pos] for pos in box.ring()]] for box in boxes],
+            "coordinates": [
+                [[[round(v, 6) for v in pos] for pos in box.ring()]] for box in boxes
+            ],
         }
 
     def _box(self, destination: GeocodedDestination) -> BoundingBox:
         d_lat = self._radius / self.METERS_PER_DEGREE
         # Degrees of longitude shrink toward the poles; floor cos() to avoid blow-up.
-        d_lon = self._radius / (self.METERS_PER_DEGREE * max(math.cos(math.radians(destination.lat)), 0.01))
+        d_lon = self._radius / (
+            self.METERS_PER_DEGREE * max(math.cos(math.radians(destination.lat)), 0.01)
+        )
         return BoundingBox(
-            max(destination.lon - d_lon, -180.0), max(destination.lat - d_lat, -90.0),
-            min(destination.lon + d_lon, 180.0), min(destination.lat + d_lat, 90.0),
+            max(destination.lon - d_lon, -180.0),
+            max(destination.lat - d_lat, -90.0),
+            min(destination.lon + d_lon, 180.0),
+            min(destination.lat + d_lat, 90.0),
         )
 
     @staticmethod
@@ -501,13 +544,10 @@ class AreaPolygonBuilder:
         return merged
 
 
-# ---------------------------------------------------------------------------
 # Places query
-# ---------------------------------------------------------------------------
 class PlacesQueryBuilder:
-    """Builds the Places POST body for one page."""
 
-    def __init__(self, config: IngestionConfig):
+    def __init__(self, config: ExtractConfig):
         self._config = config
 
     def build(self, area: Dict, offset: int) -> Dict:
@@ -520,12 +560,9 @@ class PlacesQueryBuilder:
         }
 
 
-# ---------------------------------------------------------------------------
 # S3 storage
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class IngestionRun:
-    """Identifies one execution."""
+class ExtractRun:
 
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -537,18 +574,17 @@ class RawObjectKeyBuilder:
     def __init__(self, prefix: str):
         self._prefix = prefix.rstrip("/")
 
-    def _base(self, run: IngestionRun) -> str:
-        return f"{self._prefix}/ingest_date={run.started_at:%Y-%m-%d}"
+    def _base(self, run: ExtractRun) -> str:
+        return f"{self._prefix}/extract_date={run.started_at:%Y-%m-%d}"
 
-    def geocode(self, run: IngestionRun) -> str:
+    def geocode(self, run: ExtractRun) -> str:
         return f"{self._base(run)}/geocode_{run.started_at:%H%M%S}_{run.run_id}.json"
 
-    def places_page(self, run: IngestionRun, page: int) -> str:
+    def places_page(self, run: ExtractRun, page: int) -> str:
         return f"{self._base(run)}/places_{run.started_at:%H%M%S}_{run.run_id}_page{page:03d}.json"
 
 
 class S3RawWriter:
-    """Writes raw bytes to S3 unchanged."""
 
     def __init__(self, bucket: str, client=None):
         self._bucket = bucket
@@ -560,23 +596,17 @@ class S3RawWriter:
 
     def write(self, key: str, body: bytes) -> str:
         self._client.put_object(
-            Bucket=self._bucket,
-            Key=key,
-            Body=body,
-            ContentType="application/json",
-            # ServerSideEncryption="aws:kms", SSEKMSKeyId="<YOUR_KMS_KEY_ARN>",  # optional
+            Bucket=self._bucket, Key=key, Body=body, ContentType="application/json"
         )
         return key
 
 
-# ---------------------------------------------------------------------------
 # Orchestration
-# ---------------------------------------------------------------------------
-class IngestionError(Exception):
+class ExtractError(Exception):
     """Raised when no destination could be geocoded."""
 
 
-class IngestionService:
+class ExtractService:
     """Coordinates geocode destinations -> build area -> page through places -> store."""
 
     def __init__(
@@ -601,13 +631,17 @@ class IngestionService:
         self._writer = writer
         self._max_pages = max_pages
 
-    def run(self, names: List[str], overrides: Optional[Dict] = None) -> Dict[str, object]:
-        run = IngestionRun()
+    def run(
+        self, names: List[str], overrides: Optional[Dict] = None
+    ) -> Dict[str, object]:
+        run = ExtractRun()
         geocoded = self._geocoder.geocode(names)
         if geocoded.not_found:
             logger.warning("Could not geocode: %s", geocoded.not_found)
         if not geocoded.destinations:
-            raise IngestionError(f"None of the {len(names)} destinations could be geocoded: {names}")
+            raise ExtractError(
+                f"None of the {len(names)} destinations could be geocoded: {names}"
+            )
         # Land the raw geocoding result too: the transform step needs it to map
         # each place back to the destination it belongs to.
         geocode_key = self._writer.write(self._key_builder.geocode(run), geocoded.raw)
@@ -615,51 +649,67 @@ class IngestionService:
         area = self._area_builder.build(geocoded.destinations)
         page_keys, place_count = [], 0
         for page in range(self._max_pages):
-            body = {**self._query_builder.build(area, offset=place_count), **(overrides or {})}
+            body = {
+                **self._query_builder.build(area, offset=place_count),
+                **(overrides or {}),
+            }
             raw = self._client.post_json(self._places_url, body).body
             features = self._validator.validate_places(raw)["features"]
             if not features:
                 break
-            page_keys.append(self._writer.write(self._key_builder.places_page(run, page), raw))
+            page_keys.append(
+                self._writer.write(self._key_builder.places_page(run, page), raw)
+            )
             place_count += len(features)
             if len(features) < body["limit"]:
                 break
         else:
-            logger.warning("Stopped after MAX_PAGES=%d; more places may exist", self._max_pages)
+            logger.warning(
+                "Stopped after MAX_PAGES=%d; more places may exist", self._max_pages
+            )
 
         logger.info(
             "Wrote %d places for %d destinations to s3://%s",
-            place_count, len(geocoded.destinations), self._writer.bucket,
+            place_count,
+            len(geocoded.destinations),
+            self._writer.bucket,
         )
         return {
             "status": "PARTIAL" if geocoded.not_found else "SUCCEEDED",
             "bucket": self._writer.bucket,
             "destinations": [
-                {"destination": d.name, "lat": d.lat, "lon": d.lon} for d in geocoded.destinations
+                {"destination": d.name, "lat": d.lat, "lon": d.lon}
+                for d in geocoded.destinations
             ],
             "not_geocoded": geocoded.not_found,
             "geocode_key": geocode_key,
             "places_keys": page_keys,
             "place_count": place_count,
             "run_id": run.run_id,
-            "ingest_date": f"{run.started_at:%Y-%m-%d}",
+            "extract_date": f"{run.started_at:%Y-%m-%d}",
         }
 
 
-def build_locator(config: IngestionConfig) -> DestinationLocator:
-    return DestinationLocator(config.aws_hotel_room_rates_raw_data_s3_bucket, config.hotel_prefix)
+def build_locator(config: ExtractConfig) -> DestinationLocator:
+    return DestinationLocator(
+        config.aws_hotel_room_rates_raw_data_s3_bucket, config.hotel_prefix
+    )
 
 
-def build_service(config: IngestionConfig) -> IngestionService:
+def build_service(config: ExtractConfig) -> ExtractService:
     """Composition root: the only place that wires the pieces together."""
     client = GeoapifyClient(
         QueryParamKeyAuthenticator(SecretProvider(config.api_key_secret)),
         config.request_timeout,
     )
     validator = ResponseValidator()
-    return IngestionService(
+    return ExtractService(
         geocoder=CityGeocoder(
-            client, validator, config.geocode_url, config.lang, config.geocode_concurrency,
+            client,
+            validator,
+            config.geocode_url,
+            config.lang,
+            config.geocode_concurrency,
         ),
         area_builder=AreaPolygonBuilder(config.area_radius_meters),
         query_builder=PlacesQueryBuilder(config),
@@ -673,13 +723,13 @@ def build_service(config: IngestionConfig) -> IngestionService:
 
 
 _locator: Optional[DestinationLocator] = None
-_service: Optional[IngestionService] = None
+_service: Optional[ExtractService] = None
 
 
 def lambda_handler(event, context):
     global _locator, _service
     if _service is None:
-        config = IngestionConfig.from_env()
+        config = ExtractConfig.from_env()
         _locator = build_locator(config)
         _service = build_service(config)
 

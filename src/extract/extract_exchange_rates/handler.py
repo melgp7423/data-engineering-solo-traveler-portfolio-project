@@ -1,6 +1,5 @@
 """
-Lambda: extract exchange rates from freecurrencyapi.com and land the raw JSON
-response in S3 — OOP / Single Responsibility Principle.
+Lambda: extract exchange rates from freecurrencyapi.com and land the raw JSON response
 
 Classes and their one job:
     ExtractConfig            -> read & validate settings
@@ -12,16 +11,10 @@ Classes and their one job:
     S3RawWriter              -> write bytes to S3
     ExtractService           -> orchestrate fetch -> validate -> store
     lambda_handler           -> Lambda entry point
-    test
-    
+
 API docs: https://freecurrencyapi.com/docs/
     GET https://api.freecurrencyapi.com/v1/latest?base_currency=USD&currencies=CAD,MXN,USD
     -> {"data": {"CAD": 1.4257001775, "MXN": 18.3700024185, "USD": 1}}
-
-The key can be sent as ?apikey=... or an "apikey" header; the header is used
-(recommended by the docs) so the key never appears in URLs or access logs.
-Errors come back as non-2xx statuses (401 bad key, 422 validation, 429 quota)
-with {"message": ..., "errors"?: {...}}.
 
 Environment variables (placeholders shown):
     API_BASE_URL      = https://api.freecurrencyapi.com/v1
@@ -32,7 +25,6 @@ Environment variables (placeholders shown):
     RAW_BUCKET        = <YOUR_RAW_BUCKET_NAME>
     RAW_PREFIX        = exchange_rates/
     REQUEST_TIMEOUT   = 30
-
 """
 
 import json
@@ -51,10 +43,10 @@ import boto3
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
+
 # Configuration
 @dataclass(frozen=True)
 class ExtractConfig:
-    """Holds and validates all runtime settings."""
 
     api_base_url: str
     api_endpoint: str
@@ -68,13 +60,19 @@ class ExtractConfig:
     @classmethod
     def from_env(cls) -> "ExtractConfig":
         config = cls(
-            api_base_url=os.environ.get("API_BASE_URL", "https://api.freecurrencyapi.com/v1"),
+            api_base_url=os.environ.get(
+                "API_BASE_URL", "https://api.freecurrencyapi.com/v1"
+            ),
             api_endpoint=os.environ.get("API_ENDPOINT", "latest"),
-            access_key_secret=os.environ.get("ACCESS_KEY_SECRET", "prod/travelProject/exchangeRatesApi"),
+            access_key_secret=os.environ.get(
+                "ACCESS_KEY_SECRET", "prod/travelProject/exchangeRatesApi"
+            ),
             raw_bucket=os.environ.get("RAW_BUCKET", "").strip(),
             raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
             base_currency=os.environ.get("BASE_CURRENCY", "USD").strip().upper(),
-            currencies=os.environ.get("CURRENCIES", "CAD,MXN,USD").replace(" ", "").upper(),
+            currencies=os.environ.get("CURRENCIES", "CAD,MXN,USD")
+            .replace(" ", "")
+            .upper(),
             request_timeout=int(os.environ.get("REQUEST_TIMEOUT", "30")),
         )
         config.validate()
@@ -89,7 +87,9 @@ class ExtractConfig:
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
 
     @property
     def endpoint_url(self) -> str:
@@ -97,13 +97,12 @@ class ExtractConfig:
 
     @property
     def query_params(self) -> Dict[str, str]:
-        """Optional filters; empty values are left out."""
         params = {"base_currency": self.base_currency, "currencies": self.currencies}
         return {k: v for k, v in params.items() if v}
 
+
 # Secrets
 class SecretProvider:
-    """Fetches (and caches) the access key from Secrets Manager."""
 
     def __init__(self, secret_id: str, client=None):
         self._secret_id = secret_id
@@ -112,15 +111,14 @@ class SecretProvider:
 
     def get(self) -> str:
         if self._cached is None:
-            raw = self._client.get_secret_value(SecretId=self._secret_id)["SecretString"].strip()
+            raw = self._client.get_secret_value(SecretId=self._secret_id)[
+                "SecretString"
+            ].strip()
             self._cached = self._extract_key(raw)
         return self._cached
 
     @staticmethod
     def _extract_key(raw: str) -> str:
-        """Secrets Manager can store either a plain string or a JSON
-        key/value pair (e.g. {"apikey": "..."}) depending on how the
-        secret was created in the console. Support both."""
         if raw.startswith("{"):
             try:
                 parsed = json.loads(raw)
@@ -134,10 +132,9 @@ class SecretProvider:
                         return parsed[name].strip()
         return raw
 
+
 # Authentication
 class HeaderKeyAuthenticator:
-    """freecurrencyapi authenticates with an "apikey" header on every request."""
-
     def __init__(self, secrets: SecretProvider, header_name: str = "apikey"):
         self._secrets = secrets
         self._header_name = header_name
@@ -145,10 +142,9 @@ class HeaderKeyAuthenticator:
     def apply(self, headers: Dict[str, str]) -> Dict[str, str]:
         return {**headers, self._header_name: self._secrets.get()}
 
+
 # HTTP
 class ExchangeRatesClient:
-    """Performs the GET request and returns the raw response bytes."""
-
     # Cloudflare in front of freecurrencyapi rejects urllib's default
     # "Python-urllib/3.x" User-Agent with a 403 (error 1010), so send our own.
     HEADERS = {
@@ -156,7 +152,9 @@ class ExchangeRatesClient:
         "User-Agent": "travel-app-data-engineering/1.0 (+aws-lambda)",
     }
 
-    def __init__(self, endpoint_url: str, authenticator: HeaderKeyAuthenticator, timeout: int):
+    def __init__(
+        self, endpoint_url: str, authenticator: HeaderKeyAuthenticator, timeout: int
+    ):
         self._endpoint_url = endpoint_url
         self._authenticator = authenticator
         self._timeout = timeout
@@ -174,23 +172,36 @@ class ExchangeRatesClient:
             "GET %s?%s headers=%s",
             self._endpoint_url,
             query,
-            {k: (f"<redacted len={len(v)}>" if k.lower() == "apikey" else v) for k, v in headers.items()},
+            {
+                k: (f"<redacted len={len(v)}>" if k.lower() == "apikey" else v)
+                for k, v in headers.items()
+            },
         )
         # The key travels in a header, never the URL, so it never hits CloudWatch.
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = response.read()
-                logger.info("GET %s -> %s (%d bytes)", self._endpoint_url, response.status, len(body))
+                logger.info(
+                    "GET %s -> %s (%d bytes)",
+                    self._endpoint_url,
+                    response.status,
+                    len(body),
+                )
                 return body
         except urllib.error.HTTPError as err:
             body = err.read()[:1000]
             logger.error("HTTP %s from %s: %s", err.code, self._endpoint_url, body)
             # DEBUG: tell a Cloudflare block apart from a real API auth/quota error.
-            logger.debug("Response headers: server=%s cf-ray=%s",
-                         err.headers.get("server"), err.headers.get("cf-ray"))
+            logger.debug(
+                "Response headers: server=%s cf-ray=%s",
+                err.headers.get("server"),
+                err.headers.get("cf-ray"),
+            )
             if b"cloudflare_error" in body:
-                logger.error("Blocked by Cloudflare before reaching the API (check User-Agent / source IP), "
-                             "not an API key problem")
+                logger.error(
+                    "Blocked by Cloudflare before reaching the API (check User-Agent / source IP), "
+                    "not an API key problem"
+                )
             raise
         except urllib.error.URLError as err:
             logger.error("Could not reach %s: %s", self._endpoint_url, err.reason)
@@ -203,22 +214,21 @@ class ApiResponseError(Exception):
 
 
 class ResponseValidator:
-    """
-    freecurrencyapi signals errors with non-2xx statuses (raised by the client),
-    but still check the 200 body has a non-empty {"data": {CODE: rate}} map so
-    bad data never lands in the raw bucket and the Lambda/Step Function fails loudly.
-    """
 
     def validate(self, body: bytes) -> Dict:
         try:
             payload = json.loads(body)
         except ValueError as err:
-            raise ApiResponseError(f"Response is not valid JSON: {body[:200]!r}") from err
+            raise ApiResponseError(
+                f"Response is not valid JSON: {body[:200]!r}"
+            ) from err
 
         if not isinstance(payload, dict):
             raise ApiResponseError(f"Unexpected response shape: {body[:200]!r}")
         if "message" in payload and "data" not in payload:
-            raise ApiResponseError(f"API error: {payload.get('message')} {payload.get('errors', '')}".strip())
+            raise ApiResponseError(
+                f"API error: {payload.get('message')} {payload.get('errors', '')}".strip()
+            )
         rates = payload.get("data")
         if not isinstance(rates, dict) or not rates:
             raise ApiResponseError("Response has no 'data' rates")
@@ -228,7 +238,6 @@ class ResponseValidator:
 # S3 storage
 @dataclass(frozen=True)
 class ExtractRun:
-    """Identifies one execution."""
 
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -252,7 +261,6 @@ class RawObjectKeyBuilder:
 
 
 class S3RawWriter:
-    """Writes raw bytes to S3 unchanged."""
 
     def __init__(self, bucket: str, client=None):
         self._bucket = bucket
@@ -264,12 +272,10 @@ class S3RawWriter:
 
     def write(self, key: str, body: bytes) -> str:
         self._client.put_object(
-            Bucket=self._bucket,
-            Key=key,
-            Body=body,
-            ContentType="application/json"
+            Bucket=self._bucket, Key=key, Body=body, ContentType="application/json"
         )
         return key
+
 
 # Orchestration
 class ExtractService:
@@ -296,7 +302,12 @@ class ExtractService:
         payload = self._validator.validate(body)
         key = self._writer.write(self._key_builder.build(run), body)
 
-        logger.info("Wrote %d rates to s3://%s/%s", len(payload["data"]), self._writer.bucket, key)
+        logger.info(
+            "Wrote %d rates to s3://%s/%s",
+            len(payload["data"]),
+            self._writer.bucket,
+            key,
+        )
         return {
             "status": "SUCCEEDED",
             "bucket": self._writer.bucket,

@@ -1,24 +1,23 @@
 """
-Lambda: ingest Google Flights trip deals from SerpApi and land the raw JSON
-response in S3 — OOP / Single Responsibility Principle.
+Lambda: Extract Google Flights trip deals from SerpApi and land the raw JSON response in S3
 
 Docs: https://serpapi.com/google-flights-deals-api
 
 Classes and their one job:
-    IngestionConfig          -> read & validate settings
-    OutboundDateCalculator   -> compute outbound_date (today + N days)
-    DealsQueryBuilder        -> build the round-trip query params for one run
-    SecretProvider           -> fetch the API key from Secrets Manager
+    ExtractConfig              -> read & validate settings
+    OutboundDateCalculator     -> compute outbound_date (today + N days)
+    DealsQueryBuilder          -> build the round-trip query params for one run
+    SecretProvider             -> fetch the API key from Secrets Manager
     QueryParamKeyAuthenticator -> add ?api_key=... to the request
-    FlightDealsClient        -> make the HTTP call
-    ResponseValidator        -> reject API error payloads (SerpApi returns
+    FlightDealsClient          -> make the HTTP call
+    ResponseValidator          -> reject API error payloads (SerpApi returns
                                 errors as {"error": "..."})
-    RawObjectKeyBuilder      -> name the S3 object
-    S3RawWriter              -> write bytes to S3
-    IngestionService         -> orchestrate build query -> fetch -> validate -> store
-    lambda_handler           -> Lambda entry point
-    test
-    
+    RawObjectKeyBuilder        -> name the S3 object
+    S3RawWriter                -> write bytes to S3
+    ExtractService             -> orchestrate build query -> fetch -> validate -> store
+    lambda_handler             -> Lambda entry point
+
+
 Environment variables (placeholders shown):
     API_URL                                         = https://serpapi.com/search.json
     API_KEY_SECRET                                  = <SECRETS_MANAGER_SECRET_ID>   secret value = your SerpApi key
@@ -30,8 +29,6 @@ Environment variables (placeholders shown):
     AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET          = <YOUR_RAW_BUCKET_NAME>
     RAW_PREFIX                                      = airplane_ticket_rates/
     REQUEST_TIMEOUT                                 = 60
-
-Only uses libraries built into the Lambda Python runtime.
 """
 
 import json
@@ -51,12 +48,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class IngestionConfig:
-    """Holds and validates all runtime settings."""
+class ExtractConfig:
 
     api_url: str
     api_key_secret: str
@@ -70,11 +64,15 @@ class IngestionConfig:
     request_timeout: int = 60
 
     @classmethod
-    def from_env(cls) -> "IngestionConfig":
+    def from_env(cls) -> "ExtractConfig":
         config = cls(
             api_url=os.environ.get("API_URL", "https://serpapi.com/search.json"),
-            api_key_secret=os.environ.get("API_KEY_SECRET", "prod/travelProject/serpApi"),
-            aws_airplane_ticket_raw_data_s3_bucket=os.environ.get("AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", "").strip(),
+            api_key_secret=os.environ.get(
+                "API_KEY_SECRET", "prod/travelProject/serpApi"
+            ),
+            aws_airplane_ticket_raw_data_s3_bucket=os.environ.get(
+                "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", ""
+            ).strip(),
             raw_prefix=os.environ.get("RAW_PREFIX", "airplane_ticket_rates/"),
             departure_id=os.environ.get("DEPARTURE_ID", "PHX").strip().upper(),
             outbound_offset_days=int(os.environ.get("OUTBOUND_OFFSET_DAYS", "7")),
@@ -94,7 +92,9 @@ class IngestionConfig:
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
         if self.trip_length_days < 1:
             raise ValueError("TRIP_LENGTH_DAYS must be at least 1")
         if self.adults < 1:
@@ -103,9 +103,7 @@ class IngestionConfig:
             raise ValueError("OUTBOUND_OFFSET_DAYS cannot be negative")
 
 
-# ---------------------------------------------------------------------------
 # Query parameters
-# ---------------------------------------------------------------------------
 class OutboundDateCalculator:
     """Computes the outbound date as today + offset_days. The clock is
     injectable so tests can pin 'today'."""
@@ -132,7 +130,7 @@ class DealsQueryBuilder:
     ENGINE = "google_flights_deals"
     ROUND_TRIP = "1"
 
-    def __init__(self, config: IngestionConfig, date_calculator: OutboundDateCalculator):
+    def __init__(self, config: ExtractConfig, date_calculator: OutboundDateCalculator):
         self._config = config
         self._date_calculator = date_calculator
 
@@ -151,9 +149,7 @@ class DealsQueryBuilder:
         return {k: v for k, v in params.items() if v}
 
 
-# ---------------------------------------------------------------------------
 # Secrets
-# ---------------------------------------------------------------------------
 class SecretProvider:
     """Fetches (and caches) the API key from Secrets Manager."""
 
@@ -164,7 +160,9 @@ class SecretProvider:
 
     def get(self) -> str:
         if self._cached is None:
-            raw = self._client.get_secret_value(SecretId=self._secret_id)["SecretString"].strip()
+            raw = self._client.get_secret_value(SecretId=self._secret_id)[
+                "SecretString"
+            ].strip()
             self._cached = self._extract_key(raw)
         return self._cached
 
@@ -185,9 +183,7 @@ class SecretProvider:
         return raw
 
 
-# ---------------------------------------------------------------------------
 # Authentication
-# ---------------------------------------------------------------------------
 class QueryParamKeyAuthenticator:
     """SerpApi authenticates with ?api_key=<key> on every request."""
 
@@ -199,15 +195,15 @@ class QueryParamKeyAuthenticator:
         return {**params, self._param_name: self._secrets.get()}
 
 
-# ---------------------------------------------------------------------------
 # HTTP
-# ---------------------------------------------------------------------------
 class FlightDealsClient:
     """Performs the GET request and returns the raw response bytes."""
 
     HEADERS = {"Accept": "application/json"}
 
-    def __init__(self, api_url: str, authenticator: QueryParamKeyAuthenticator, timeout: int):
+    def __init__(
+        self, api_url: str, authenticator: QueryParamKeyAuthenticator, timeout: int
+    ):
         self._api_url = api_url
         self._authenticator = authenticator
         self._timeout = timeout
@@ -221,19 +217,21 @@ class FlightDealsClient:
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 body = response.read()
-                logger.info("GET %s -> %s (%d bytes)", self._api_url, response.status, len(body))
+                logger.info(
+                    "GET %s -> %s (%d bytes)", self._api_url, response.status, len(body)
+                )
                 return body
         except urllib.error.HTTPError as err:
-            logger.error("HTTP %s from %s: %s", err.code, self._api_url, err.read()[:500])
+            logger.error(
+                "HTTP %s from %s: %s", err.code, self._api_url, err.read()[:500]
+            )
             raise
         except urllib.error.URLError as err:
             logger.error("Could not reach %s: %s", self._api_url, err.reason)
             raise
 
 
-# ---------------------------------------------------------------------------
 # Validation
-# ---------------------------------------------------------------------------
 class ApiResponseError(Exception):
     """Raised when the API returns an error payload."""
 
@@ -249,7 +247,9 @@ class ResponseValidator:
         try:
             payload = json.loads(body)
         except ValueError as err:
-            raise ApiResponseError(f"Response is not valid JSON: {body[:200]!r}") from err
+            raise ApiResponseError(
+                f"Response is not valid JSON: {body[:200]!r}"
+            ) from err
 
         if "error" in payload:
             raise ApiResponseError(f"API error: {payload['error']}")
@@ -259,11 +259,9 @@ class ResponseValidator:
         return payload
 
 
-# ---------------------------------------------------------------------------
 # S3 storage
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class IngestionRun:
+class ExtractRun:
     """Identifies one execution."""
 
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
@@ -276,12 +274,12 @@ class RawObjectKeyBuilder:
     def __init__(self, prefix: str):
         self._prefix = prefix.rstrip("/")
 
-    def build(self, run: IngestionRun, params: Dict[str, str]) -> str:
+    def build(self, run: ExtractRun, params: Dict[str, str]) -> str:
         departure = params.get("departure_id", "ANY")
         outbound_date = params.get("outbound_date", f"{run.started_at:%Y-%m-%d}")
         return_date = params.get("return_date", "OPEN")
         return (
-            f"{self._prefix}/ingest_date={run.started_at:%Y-%m-%d}/"
+            f"{self._prefix}/extract_date={run.started_at:%Y-%m-%d}/"
             f"deals_{departure}_{outbound_date}_{return_date}_{run.started_at:%H%M%S}_{run.run_id}.json"
         )
 
@@ -299,19 +297,13 @@ class S3RawWriter:
 
     def write(self, key: str, body: bytes) -> str:
         self._client.put_object(
-            Bucket=self._bucket,
-            Key=key,
-            Body=body,
-            ContentType="application/json",
-            # ServerSideEncryption="aws:kms", SSEKMSKeyId="<YOUR_KMS_KEY_ARN>",  # optional
+            Bucket=self._bucket, Key=key, Body=body, ContentType="application/json"
         )
         return key
 
 
-# ---------------------------------------------------------------------------
 # Orchestration
-# ---------------------------------------------------------------------------
-class IngestionService:
+class ExtractService:
     """Coordinates build query -> fetch -> validate -> name -> store."""
 
     def __init__(
@@ -329,7 +321,7 @@ class IngestionService:
         self._writer = writer
 
     def run(self, overrides: Optional[Dict[str, str]] = None) -> Dict[str, object]:
-        run = IngestionRun()
+        run = ExtractRun()
         params = {**self._query_builder.build(), **(overrides or {})}
         body = self._client.fetch(params)
         payload = self._validator.validate(body)
@@ -346,13 +338,13 @@ class IngestionService:
             "return_date": params.get("return_date"),
             "adults": params.get("adults"),
             "run_id": run.run_id,
-            "ingest_date": f"{run.started_at:%Y-%m-%d}",
+            "extract_date": f"{run.started_at:%Y-%m-%d}",
         }
 
 
-def build_service(config: IngestionConfig) -> IngestionService:
+def build_service(config: ExtractConfig) -> ExtractService:
     """Composition root: the only place that wires the pieces together."""
-    return IngestionService(
+    return ExtractService(
         query_builder=DealsQueryBuilder(
             config, OutboundDateCalculator(config.outbound_offset_days)
         ),
@@ -367,13 +359,13 @@ def build_service(config: IngestionConfig) -> IngestionService:
     )
 
 
-_service: Optional[IngestionService] = None
+_service: Optional[ExtractService] = None
 
 
 def lambda_handler(event, context):
     global _service
     if _service is None:
-        _service = build_service(IngestionConfig.from_env())
+        _service = build_service(ExtractConfig.from_env())
 
     # Optional per-run overrides from Step Functions, e.g. {"query_params": {"departure_id": "JFK"}}
     overrides = event.get("query_params", {}) if isinstance(event, dict) else {}
