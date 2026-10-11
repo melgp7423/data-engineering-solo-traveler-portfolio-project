@@ -1,16 +1,16 @@
 """
-Lambda: ingest exchange rates from freecurrencyapi.com and land the raw JSON
+Lambda: extract exchange rates from freecurrencyapi.com and land the raw JSON
 response in S3 — OOP / Single Responsibility Principle.
 
 Classes and their one job:
-    IngestionConfig          -> read & validate settings
+    ExtractConfig            -> read & validate settings
     SecretProvider           -> fetch the API key from Secrets Manager
     HeaderKeyAuthenticator   -> add the "apikey" header to the request
     ExchangeRatesClient      -> make the HTTP call
     ResponseValidator        -> reject payloads without a "data" rates map
     RawObjectKeyBuilder      -> name the S3 object
     S3RawWriter              -> write bytes to S3
-    IngestionService         -> orchestrate fetch -> validate -> store
+    ExtractService           -> orchestrate fetch -> validate -> store
     lambda_handler           -> Lambda entry point
     test
     
@@ -33,7 +33,6 @@ Environment variables (placeholders shown):
     RAW_PREFIX        = exchange_rates/
     REQUEST_TIMEOUT   = 30
 
-Only uses libraries built into the Lambda Python runtime.
 """
 
 import json
@@ -52,12 +51,9 @@ import boto3
 logger = logging.getLogger()
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
 
-
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class IngestionConfig:
+class ExtractConfig:
     """Holds and validates all runtime settings."""
 
     api_base_url: str
@@ -70,7 +66,7 @@ class IngestionConfig:
     request_timeout: int = 30
 
     @classmethod
-    def from_env(cls) -> "IngestionConfig":
+    def from_env(cls) -> "ExtractConfig":
         config = cls(
             api_base_url=os.environ.get("API_BASE_URL", "https://api.freecurrencyapi.com/v1"),
             api_endpoint=os.environ.get("API_ENDPOINT", "latest"),
@@ -105,10 +101,7 @@ class IngestionConfig:
         params = {"base_currency": self.base_currency, "currencies": self.currencies}
         return {k: v for k, v in params.items() if v}
 
-
-# ---------------------------------------------------------------------------
 # Secrets
-# ---------------------------------------------------------------------------
 class SecretProvider:
     """Fetches (and caches) the access key from Secrets Manager."""
 
@@ -141,10 +134,7 @@ class SecretProvider:
                         return parsed[name].strip()
         return raw
 
-
-# ---------------------------------------------------------------------------
 # Authentication
-# ---------------------------------------------------------------------------
 class HeaderKeyAuthenticator:
     """freecurrencyapi authenticates with an "apikey" header on every request."""
 
@@ -155,10 +145,7 @@ class HeaderKeyAuthenticator:
     def apply(self, headers: Dict[str, str]) -> Dict[str, str]:
         return {**headers, self._header_name: self._secrets.get()}
 
-
-# ---------------------------------------------------------------------------
 # HTTP
-# ---------------------------------------------------------------------------
 class ExchangeRatesClient:
     """Performs the GET request and returns the raw response bytes."""
 
@@ -210,9 +197,7 @@ class ExchangeRatesClient:
             raise
 
 
-# ---------------------------------------------------------------------------
 # Validation
-# ---------------------------------------------------------------------------
 class ApiResponseError(Exception):
     """Raised when the API returns an error payload."""
 
@@ -240,11 +225,9 @@ class ResponseValidator:
         return payload
 
 
-# ---------------------------------------------------------------------------
 # S3 storage
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
-class IngestionRun:
+class ExtractRun:
     """Identifies one execution."""
 
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
@@ -258,12 +241,12 @@ class RawObjectKeyBuilder:
         self._prefix = prefix.rstrip("/")
         self._base_currency = base_currency or "UNKNOWN"
 
-    def build(self, run: IngestionRun) -> str:
+    def build(self, run: ExtractRun) -> str:
         # The API response carries no date or base, so use the run time and config.
         rate_date = f"{run.started_at:%Y-%m-%d}"
         base = self._base_currency
         return (
-            f"{self._prefix}/ingest_date={run.started_at:%Y-%m-%d}/"
+            f"{self._prefix}/extract_date={run.started_at:%Y-%m-%d}/"
             f"rates_{base}_{rate_date}_{run.started_at:%H%M%S}_{run.run_id}.json"
         )
 
@@ -284,16 +267,12 @@ class S3RawWriter:
             Bucket=self._bucket,
             Key=key,
             Body=body,
-            ContentType="application/json",
-            # ServerSideEncryption="aws:kms", SSEKMSKeyId="<YOUR_KMS_KEY_ARN>",  # optional
+            ContentType="application/json"
         )
         return key
 
-
-# ---------------------------------------------------------------------------
 # Orchestration
-# ---------------------------------------------------------------------------
-class IngestionService:
+class ExtractService:
     """Coordinates fetch -> validate -> name -> store."""
 
     def __init__(
@@ -311,7 +290,7 @@ class IngestionService:
         self._default_params = default_params
 
     def run(self, overrides: Optional[Dict[str, str]] = None) -> Dict[str, object]:
-        run = IngestionRun()
+        run = ExtractRun()
         params = {**self._default_params, **(overrides or {})}
         body = self._client.fetch(params)
         payload = self._validator.validate(body)
@@ -326,13 +305,13 @@ class IngestionService:
             "rate_date": f"{run.started_at:%Y-%m-%d}",
             "rate_count": len(payload["data"]),
             "run_id": run.run_id,
-            "ingest_date": f"{run.started_at:%Y-%m-%d}",
+            "extract_date": f"{run.started_at:%Y-%m-%d}",
         }
 
 
-def build_service(config: IngestionConfig) -> IngestionService:
+def build_service(config: ExtractConfig) -> ExtractService:
     """Composition root: the only place that wires the pieces together."""
-    return IngestionService(
+    return ExtractService(
         client=ExchangeRatesClient(
             config.endpoint_url,
             HeaderKeyAuthenticator(SecretProvider(config.access_key_secret)),
@@ -345,13 +324,13 @@ def build_service(config: IngestionConfig) -> IngestionService:
     )
 
 
-_service: Optional[IngestionService] = None
+_service: Optional[ExtractService] = None
 
 
 def lambda_handler(event, context):
     global _service
     if _service is None:
-        _service = build_service(IngestionConfig.from_env())
+        _service = build_service(ExtractConfig.from_env())
 
     # Optional per-run overrides from Step Functions, e.g. {"query_params": {"currencies": "CAD,MXN"}}
     overrides = event.get("query_params", {}) if isinstance(event, dict) else {}
