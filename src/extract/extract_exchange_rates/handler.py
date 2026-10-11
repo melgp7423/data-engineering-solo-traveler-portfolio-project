@@ -12,7 +12,8 @@ Classes and their one job:
     S3RawWriter              -> write bytes to S3
     IngestionService         -> orchestrate fetch -> validate -> store
     lambda_handler           -> Lambda entry point
-
+    test
+    
 API docs: https://freecurrencyapi.com/docs/
     GET https://api.freecurrencyapi.com/v1/latest?base_currency=USD&currencies=CAD,MXN,USD
     -> {"data": {"CAD": 1.4257001775, "MXN": 18.3700024185, "USD": 1}}
