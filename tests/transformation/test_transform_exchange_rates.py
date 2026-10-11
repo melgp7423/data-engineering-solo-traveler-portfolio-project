@@ -28,15 +28,13 @@ from transformation.transform_exchange_rates.handler import (
     TransformService,
 )
 
-RAW_KEY = "ingest_date=2026-10-10/rates_USD_2026-10-10_223747_4dc31908.json"
-OTHER_KEY = "ingest_date=2026-10-10/rates_USD_2026-10-10_101500_aa11bb22.json"
+RAW_KEY = "extract_date=2026-10-10/rates_USD_2026-10-10_223747_4dc31908.json"
+OTHER_KEY = "extract_date=2026-10-10/rates_USD_2026-10-10_101500_aa11bb22.json"
 
 PAYLOAD = {"data": {"CAD": 1.4257001775, "MXN": 18.3700024185, "USD": 1}}
 
 
-# ---------------------------------------------------------------------------
 # Fakes
-# ---------------------------------------------------------------------------
 class FakePaginator:
     def __init__(self, pages):
         self.pages = pages
@@ -79,13 +77,18 @@ def build_service(s3, today=date(2026, 10, 10)):
 # ---------------------------------------------------------------------------
 def test_key_parser_extracts_base_and_date_from_file_name():
     assert RawKeyParser().parse(RAW_KEY) == ("USD", date(2026, 10, 10))
-    assert RawKeyParser().parse("exchange_rates/ingest_date=2026-10-11/rates_EUR_2026-10-11_000000_x.json") == (
+    assert RawKeyParser().parse(
+        "exchange_rates/extract_date=2026-10-11/rates_EUR_2026-10-11_000000_x.json"
+    ) == (
         "EUR",
         date(2026, 10, 11),
     )
 
 
-@pytest.mark.parametrize("key", ["ingest_date=2026-10-10/hotels_ABQ_2026-10-10.json", "rates_USD_20261010_x.json"])
+@pytest.mark.parametrize(
+    "key",
+    ["extract_date=2026-10-10/hotels_ABQ_2026-10-10.json", "rates_USD_20261010_x.json"],
+)
 def test_key_parser_rejects_unexpected_file_names(key):
     with pytest.raises(InvalidRawPayloadError):
         RawKeyParser().parse(key)
@@ -97,20 +100,46 @@ def test_key_parser_rejects_unexpected_file_names(key):
 def test_one_row_per_currency_with_rate_date_and_base():
     table = ExchangeRatesTransformer().transform(PAYLOAD, RAW_KEY)
 
-    assert table.schema == pa.schema([
-        pa.field("rate_date", pa.date32()),
-        pa.field("base_currency", pa.string()),
-        pa.field("currency", pa.string()),
-        pa.field("rate", pa.float64()),
-    ])
+    assert table.schema == pa.schema(
+        [
+            pa.field("rate_date", pa.date32()),
+            pa.field("base_currency", pa.string()),
+            pa.field("currency", pa.string()),
+            pa.field("rate", pa.float64()),
+        ]
+    )
     assert table.to_pylist() == [
-        {"rate_date": date(2026, 10, 10), "base_currency": "USD", "currency": "CAD", "rate": 1.4257001775},
-        {"rate_date": date(2026, 10, 10), "base_currency": "USD", "currency": "MXN", "rate": 18.3700024185},
-        {"rate_date": date(2026, 10, 10), "base_currency": "USD", "currency": "USD", "rate": 1.0},
+        {
+            "rate_date": date(2026, 10, 10),
+            "base_currency": "USD",
+            "currency": "CAD",
+            "rate": 1.4257001775,
+        },
+        {
+            "rate_date": date(2026, 10, 10),
+            "base_currency": "USD",
+            "currency": "MXN",
+            "rate": 18.3700024185,
+        },
+        {
+            "rate_date": date(2026, 10, 10),
+            "base_currency": "USD",
+            "currency": "USD",
+            "rate": 1.0,
+        },
     ]
 
 
-@pytest.mark.parametrize("payload", [{}, {"data": {}}, {"data": []}, {"data": {"CAD": "1.42"}}, {"data": {"CAD": None}}])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"data": {}},
+        {"data": []},
+        {"data": {"CAD": "1.42"}},
+        {"data": {"CAD": None}},
+    ],
+)
 def test_rejects_payload_without_numeric_rates(payload):
     with pytest.raises(InvalidRawPayloadError):
         ExchangeRatesTransformer().transform(payload, RAW_KEY)
@@ -122,41 +151,60 @@ def test_rejects_payload_without_numeric_rates(payload):
 def test_locator_uses_extract_lambda_output_key():
     locator = RawObjectLocator("raw-bucket")
 
-    assert locator.locate({"Payload": {"bucket": "other-raw", "key": RAW_KEY, "status": "SUCCEEDED"}}) == (
+    assert locator.locate(
+        {"Payload": {"bucket": "other-raw", "key": RAW_KEY, "status": "SUCCEEDED"}}
+    ) == (
         "other-raw",
         [RAW_KEY],
     )
 
 
 def test_locator_lists_every_json_in_todays_partition():
-    s3 = FakeS3(pages=[{"Contents": [{"Key": RAW_KEY}, {"Key": "ingest_date=2026-10-10/notes.txt"}, {"Key": OTHER_KEY}]}])
-    locator = RawObjectLocator("raw-bucket", "", client=s3, today=lambda: date(2026, 10, 10))
+    s3 = FakeS3(
+        pages=[
+            {
+                "Contents": [
+                    {"Key": RAW_KEY},
+                    {"Key": "extract_date=2026-10-10/notes.txt"},
+                    {"Key": OTHER_KEY},
+                ]
+            }
+        ]
+    )
+    locator = RawObjectLocator(
+        "raw-bucket", "", client=s3, today=lambda: date(2026, 10, 10)
+    )
 
     assert locator.locate({}) == ("raw-bucket", [OTHER_KEY, RAW_KEY])
-    assert s3.paginator.calls == [{"Bucket": "raw-bucket", "Prefix": "ingest_date=2026-10-10/"}]
+    assert s3.paginator.calls == [
+        {"Bucket": "raw-bucket", "Prefix": "extract_date=2026-10-10/"}
+    ]
 
 
 def test_locator_errors_on_empty_partition():
-    locator = RawObjectLocator("raw-bucket", client=FakeS3(pages=[{}]), today=lambda: date(2026, 10, 10))
+    locator = RawObjectLocator(
+        "raw-bucket", client=FakeS3(pages=[{}]), today=lambda: date(2026, 10, 10)
+    )
 
-    with pytest.raises(ValueError, match="ingest_date=2026-10-10"):
+    with pytest.raises(ValueError, match="extract_date=2026-10-10"):
         locator.locate({})
 
 
-# ---------------------------------------------------------------------------
 # TransformedKeyBuilder
-# ---------------------------------------------------------------------------
 def test_key_builder_mirrors_partition_and_swaps_extension():
-    assert TransformedKeyBuilder("", "").build(RAW_KEY) == RAW_KEY[: -len(".json")] + ".parquet"
     assert (
-        TransformedKeyBuilder("exchange_rates/", "rates/").build("exchange_rates/ingest_date=2026-10-10/r.json")
-        == "rates/ingest_date=2026-10-10/r.parquet"
+        TransformedKeyBuilder("", "").build(RAW_KEY)
+        == RAW_KEY[: -len(".json")] + ".parquet"
+    )
+    assert (
+        TransformedKeyBuilder("exchange_rates/", "rates/").build(
+            "exchange_rates/extract_date=2026-10-10/r.json"
+        )
+        == "rates/extract_date=2026-10-10/r.parquet"
     )
 
 
-# ---------------------------------------------------------------------------
 # TransformService
-# ---------------------------------------------------------------------------
 def test_service_writes_parquet_for_every_file_in_partition():
     s3 = FakeS3(
         objects={
@@ -198,7 +246,10 @@ def test_service_skips_bad_file_and_reports_partial():
 
 
 def test_service_raises_when_every_file_fails():
-    s3 = FakeS3(objects={("raw-bucket", RAW_KEY): b"{}"}, pages=[{"Contents": [{"Key": RAW_KEY}]}])
+    s3 = FakeS3(
+        objects={("raw-bucket", RAW_KEY): b"{}"},
+        pages=[{"Contents": [{"Key": RAW_KEY}]}],
+    )
 
     with pytest.raises(TransformError):
         build_service(s3).run({})
@@ -208,5 +259,7 @@ def test_config_requires_both_buckets(monkeypatch):
     monkeypatch.setenv("AWS_EXCHANGE_RATES_RAW_DATA_S3_BUCKET", "raw")
     monkeypatch.delenv("AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET", raising=False)
 
-    with pytest.raises(ValueError, match="AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET"):
+    with pytest.raises(
+        ValueError, match="AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET"
+    ):
         TransformConfig.from_env()

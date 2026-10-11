@@ -20,18 +20,16 @@ from extract.extract_destination_activities.handler import (
     DestinationsNotFoundError,
     GeocodedDestination,
     HttpResponse,
-    IngestionError,
-    IngestionService,
+    ExtractError,
+    ExtractService,
     PlacesQueryBuilder,
     RawObjectKeyBuilder,
     ResponseValidator,
-    IngestionConfig,
+    ExtractConfig,
 )
 
 
-# ---------------------------------------------------------------------------
 # Fakes
-# ---------------------------------------------------------------------------
 class FakeGeoapify:
     """Records calls and replays queued responses per (method, url).
     Geocoding GETs are answered per city from `cities` ({name: (lat, lon)});
@@ -51,7 +49,12 @@ class FakeGeoapify:
             return response
         if params["text"] in self._cities:
             lat, lon = self._cities[params["text"]]
-            return ok({"results": [{"lat": lat, "lon": lon}], "query": {"text": params["text"]}})
+            return ok(
+                {
+                    "results": [{"lat": lat, "lon": lon}],
+                    "query": {"text": params["text"]},
+                }
+            )
         return ok({"results": [], "query": {"text": params["text"]}})
 
     def post_json(self, url, payload, params=None):
@@ -79,7 +82,9 @@ class FakeS3:
 
         class Paginator:
             def paginate(self, Bucket, Prefix):
-                yield {"Contents": [{"Key": k} for k in objects if k.startswith(Prefix)]}
+                yield {
+                    "Contents": [{"Key": k} for k in objects if k.startswith(Prefix)]
+                }
 
         return Paginator()
 
@@ -108,12 +113,10 @@ def config(**overrides):
         raw_prefix="destination_activities/",
     )
     values.update(overrides)
-    return IngestionConfig(**values)
+    return ExtractConfig(**values)
 
 
-# ---------------------------------------------------------------------------
 # DestinationLocator
-# ---------------------------------------------------------------------------
 def test_locator_uses_hotel_lambda_output_and_dedupes():
     event = {
         "written": [
@@ -128,15 +131,19 @@ def test_locator_uses_hotel_lambda_output_and_dedupes():
 
 
 def test_locator_falls_back_to_todays_hotel_files():
-    s3 = FakeS3({
-        "hotel_room_rates/ingest_date=2026-10-05/a.json": json.dumps(
-            {"search_parameters": {"q": "Tokyo, Japan"}}
-        ).encode(),
-        "hotel_room_rates/ingest_date=2026-10-04/old.json": json.dumps(
-            {"search_parameters": {"q": "Stale, Place"}}
-        ).encode(),
-    })
-    locator = DestinationLocator("hotels", "hotel_room_rates/", client=s3, today=lambda: date(2026, 10, 5))
+    s3 = FakeS3(
+        {
+            "hotel_room_rates/extract_date=2026-10-05/a.json": json.dumps(
+                {"search_parameters": {"q": "Tokyo, Japan"}}
+            ).encode(),
+            "hotel_room_rates/extract_date=2026-10-04/old.json": json.dumps(
+                {"search_parameters": {"q": "Stale, Place"}}
+            ).encode(),
+        }
+    )
+    locator = DestinationLocator(
+        "hotels", "hotel_room_rates/", client=s3, today=lambda: date(2026, 10, 5)
+    )
     assert locator.locate({}) == ["Tokyo, Japan"]
 
 
@@ -146,31 +153,45 @@ def test_locator_raises_when_nothing_found():
         locator.locate({"written": []})
 
 
-# ---------------------------------------------------------------------------
 # CityGeocoder
-# ---------------------------------------------------------------------------
 def make_geocoder(fake, sleeps=None):
     sleep = sleeps.append if sleeps is not None else (lambda _s: None)
-    return CityGeocoder(fake, ResponseValidator(), "https://geo/search", "en", sleep=sleep)
+    return CityGeocoder(
+        fake, ResponseValidator(), "https://geo/search", "en", sleep=sleep
+    )
 
 
 def test_geocoder_sends_one_request_per_city_and_keeps_input_order():
-    fake = FakeGeoapify(cities={"Cancun, Mexico": (21.16, -86.85), "Paris, France": (48.85, 2.35)})
-    result = make_geocoder(fake).geocode(["Cancun, Mexico", "Atlantis", "Paris, France"])
+    fake = FakeGeoapify(
+        cities={"Cancun, Mexico": (21.16, -86.85), "Paris, France": (48.85, 2.35)}
+    )
+    result = make_geocoder(fake).geocode(
+        ["Cancun, Mexico", "Atlantis", "Paris, France"]
+    )
 
     assert result.destinations == [
         GeocodedDestination("Cancun, Mexico", 21.16, -86.85),
         GeocodedDestination("Paris, France", 48.85, 2.35),
     ]
     assert result.not_found == ["Atlantis"]
-    assert sorted(c[2]["text"] for c in fake.calls) == ["Atlantis", "Cancun, Mexico", "Paris, France"]
+    assert sorted(c[2]["text"] for c in fake.calls) == [
+        "Atlantis",
+        "Cancun, Mexico",
+        "Paris, France",
+    ]
     assert all(c[2]["type"] == "city" and c[2]["limit"] == "1" for c in fake.calls)
     raw = json.loads(result.raw)
-    assert [r["query"]["text"] for r in raw] == ["Cancun, Mexico", "Atlantis", "Paris, France"]
+    assert [r["query"]["text"] for r in raw] == [
+        "Cancun, Mexico",
+        "Atlantis",
+        "Paris, France",
+    ]
 
 
 def rate_limited():
-    return urllib.error.HTTPError("https://geo/search", 429, "Too Many Requests", {}, None)
+    return urllib.error.HTTPError(
+        "https://geo/search", 429, "Too Many Requests", {}, None
+    )
 
 
 def http_error(code):
@@ -178,11 +199,15 @@ def http_error(code):
 
 
 def test_geocoder_retries_when_rate_limited():
-    fake = FakeGeoapify({("GET", "https://geo/search"): [
-        rate_limited(),
-        http_error(503),
-        ok({"results": [{"lat": 1.0, "lon": 2.0}]}),
-    ]})
+    fake = FakeGeoapify(
+        {
+            ("GET", "https://geo/search"): [
+                rate_limited(),
+                http_error(503),
+                ok({"results": [{"lat": 1.0, "lon": 2.0}]}),
+            ]
+        }
+    )
     sleeps = []
     result = make_geocoder(fake, sleeps).geocode(["X"])
 
@@ -200,11 +225,17 @@ def test_geocoder_does_not_retry_client_errors():
 
 
 def test_geocoder_treats_network_and_api_errors_as_not_found():
-    fake = FakeGeoapify({("GET", "https://geo/search"): [
-        urllib.error.URLError("timed out"),
-        ok({"statusCode": 400, "error": "Bad Request", "message": "bad text"}),
-    ]})
-    geocoder = CityGeocoder(fake, ResponseValidator(), "https://geo/search", "en", concurrency=1)
+    fake = FakeGeoapify(
+        {
+            ("GET", "https://geo/search"): [
+                urllib.error.URLError("timed out"),
+                ok({"statusCode": 400, "error": "Bad Request", "message": "bad text"}),
+            ]
+        }
+    )
+    geocoder = CityGeocoder(
+        fake, ResponseValidator(), "https://geo/search", "en", concurrency=1
+    )
     result = geocoder.geocode(["A", "B"])
 
     assert result.destinations == []
@@ -220,14 +251,14 @@ def test_geocoder_reports_city_as_not_found_after_retries_run_out():
     assert result.not_found == ["X"]
 
 
-# ---------------------------------------------------------------------------
 # AreaPolygonBuilder
-# ---------------------------------------------------------------------------
 def test_area_is_one_multipolygon_with_a_closed_square_per_city():
-    area = AreaPolygonBuilder(10000).build([
-        GeocodedDestination("Cancun", 21.16, -86.85),
-        GeocodedDestination("Paris", 48.85, 2.35),
-    ])
+    area = AreaPolygonBuilder(10000).build(
+        [
+            GeocodedDestination("Cancun", 21.16, -86.85),
+            GeocodedDestination("Paris", 48.85, 2.35),
+        ]
+    )
     assert area["type"] == "MultiPolygon"
     assert len(area["coordinates"]) == 2
     for polygon in area["coordinates"]:
@@ -243,20 +274,20 @@ def test_area_is_one_multipolygon_with_a_closed_square_per_city():
 
 
 def test_overlapping_cities_are_merged_into_one_polygon():
-    area = AreaPolygonBuilder(10000).build([
-        GeocodedDestination("A", 40.0, -3.70),
-        GeocodedDestination("B", 40.05, -3.65),
-        GeocodedDestination("Far", 10.0, 10.0),
-    ])
+    area = AreaPolygonBuilder(10000).build(
+        [
+            GeocodedDestination("A", 40.0, -3.70),
+            GeocodedDestination("B", 40.05, -3.65),
+            GeocodedDestination("Far", 10.0, 10.0),
+        ]
+    )
     assert len(area["coordinates"]) == 2
 
 
-# ---------------------------------------------------------------------------
-# IngestionService
-# ---------------------------------------------------------------------------
+# ExtractionService
 def make_service(fake, writer, cfg):
     validator = ResponseValidator()
-    return IngestionService(
+    return ExtractService(
         geocoder=make_geocoder(fake),
         area_builder=AreaPolygonBuilder(cfg.area_radius_meters),
         query_builder=PlacesQueryBuilder(cfg),
@@ -276,7 +307,11 @@ def feature(i):
 def test_service_sends_single_places_request_for_all_destinations():
     cfg = config()
     fake = FakeGeoapify(
-        {("POST", "https://geo/places"): [ok({"type": "FeatureCollection", "features": [feature(1)]})]},
+        {
+            ("POST", "https://geo/places"): [
+                ok({"type": "FeatureCollection", "features": [feature(1)]})
+            ]
+        },
         cities={"Cancun, Mexico": (21.16, -86.85), "Paris, France": (48.85, 2.35)},
     )
     writer = FakeWriter()
@@ -299,10 +334,12 @@ def test_service_sends_single_places_request_for_all_destinations():
 def test_service_pages_with_offset_when_a_page_is_full():
     cfg = config(places_limit=2)
     fake = FakeGeoapify(
-        {("POST", "https://geo/places"): [
-            ok({"features": [feature(1), feature(2)]}),
-            ok({"features": [feature(3)]}),
-        ]},
+        {
+            ("POST", "https://geo/places"): [
+                ok({"features": [feature(1), feature(2)]}),
+                ok({"features": [feature(3)]}),
+            ]
+        },
         cities={"X": (1.0, 1.0)},
     )
     result = make_service(fake, FakeWriter(), cfg).run(["X"])
@@ -329,13 +366,17 @@ def test_service_is_partial_when_some_cities_do_not_geocode():
 
 def test_service_fails_when_nothing_geocodes():
     fake = FakeGeoapify()
-    with pytest.raises(IngestionError):
+    with pytest.raises(ExtractError):
         make_service(fake, FakeWriter(), config()).run(["X"])
 
 
 def test_config_rejects_placeholder_bucket():
-    with pytest.raises(ValueError, match="AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET"):
-        config(aws_destination_activities_raw_data_s3_bucket="<YOUR_RAW_BUCKET_NAME>").validate()
+    with pytest.raises(
+        ValueError, match="AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET"
+    ):
+        config(
+            aws_destination_activities_raw_data_s3_bucket="<YOUR_RAW_BUCKET_NAME>"
+        ).validate()
 
 
 def test_config_rejects_empty_hotel_bucket():
@@ -353,11 +394,13 @@ def test_config_from_env_uses_synchronous_geocoding_defaults(monkeypatch):
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "hotels")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", "raw-bucket")
     # The old batch URL variable must not be picked up any more.
-    monkeypatch.setenv("GEOCODE_URL", "https://api.geoapify.com/v1/batch/geocode/search")
+    monkeypatch.setenv(
+        "GEOCODE_URL", "https://api.geoapify.com/v1/batch/geocode/search"
+    )
     for name in ("GEOCODE_SEARCH_URL", "GEOCODE_CONCURRENCY", "REQUEST_TIMEOUT"):
         monkeypatch.delenv(name, raising=False)
 
-    cfg = IngestionConfig.from_env()
+    cfg = ExtractConfig.from_env()
 
     assert cfg.geocode_url == "https://api.geoapify.com/v1/geocode/search"
     assert cfg.geocode_concurrency == 4
@@ -370,7 +413,7 @@ def test_config_from_env_reads_geocode_overrides(monkeypatch):
     monkeypatch.setenv("GEOCODE_SEARCH_URL", "https://geo/custom")
     monkeypatch.setenv("GEOCODE_CONCURRENCY", "2")
 
-    cfg = IngestionConfig.from_env()
+    cfg = ExtractConfig.from_env()
 
     assert cfg.geocode_url == "https://geo/custom"
     assert cfg.geocode_concurrency == 2

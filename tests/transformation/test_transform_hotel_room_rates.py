@@ -26,8 +26,12 @@ from transformation.transform_hotel_room_rates.handler import (
     TransformService,
 )
 
-RAW_KEY = "ingest_date=2026-10-09/hotels_SAT_2026-10-16_2026-10-23_021651_fde87987.json"
-OTHER_KEY = "ingest_date=2026-10-09/hotels_ABQ_2026-10-16_2026-10-23_021651_fde87987.json"
+RAW_KEY = (
+    "extract_date=2026-10-09/hotels_SAT_2026-10-16_2026-10-23_021651_fde87987.json"
+)
+OTHER_KEY = (
+    "extract_date=2026-10-09/hotels_ABQ_2026-10-16_2026-10-23_021651_fde87987.json"
+)
 
 SEARCH_METADATA = {
     "id": "6ac84eebb8b4a5d8e3c9e593",
@@ -93,9 +97,7 @@ def make_payload(properties=None):
     }
 
 
-# ---------------------------------------------------------------------------
 # Fakes
-# ---------------------------------------------------------------------------
 class FakePaginator:
     def __init__(self, pages):
         self.pages = pages
@@ -133,9 +135,7 @@ def build_service(s3, today=date(2026, 10, 9)):
     )
 
 
-# ---------------------------------------------------------------------------
 # HotelsTransformer
-# ---------------------------------------------------------------------------
 def test_keeps_all_metadata_parameters_and_only_requested_property_fields():
     table = HotelsTransformer().transform(make_payload())
 
@@ -171,20 +171,29 @@ def test_keeps_all_metadata_parameters_and_only_requested_property_fields():
     ]
     row = table.to_pylist()[0]
     assert row["search_metadata_id"] == "6ac84eebb8b4a5d8e3c9e593"
-    assert row["search_metadata_created_at"] == datetime(2026, 10, 9, 2, 18, 19, 193000, tzinfo=timezone.utc)
+    assert row["search_metadata_created_at"] == datetime(
+        2026, 10, 9, 2, 18, 19, 193000, tzinfo=timezone.utc
+    )
     assert row["search_metadata_total_time_taken"] == pytest.approx(2.2552249431610107)
     assert row["search_parameters_q"] == "San Antonio, United States"
     assert row["search_parameters_check_in_date"] == "2026-10-16"
     assert row["search_parameters_adults"] == 1
     assert row["search_parameters_children"] == 0
     assert row["search_parameters_hotel_class"] == "3,4,5"
-    assert row["name"] == "InTown Suites Extended Stay San Antonio TX - Nacogdoches Road"
+    assert (
+        row["name"] == "InTown Suites Extended Stay San Antonio TX - Nacogdoches Road"
+    )
     assert row["check_in_time"] == "3:00 PM"
     assert row["check_out_time"] == "12:00 PM"
     assert row["total_rate_extracted_lowest"] == 290
     assert row["extracted_hotel_class"] == 3
     assert row["overall_rating"] == 4.0
-    assert row["amenities"] == ["Free Wi-Fi", "Free parking", "Air conditioning", "Kitchen"]
+    assert row["amenities"] == [
+        "Free Wi-Fi",
+        "Free parking",
+        "Air conditioning",
+        "Kitchen",
+    ]
 
 
 def test_search_info_repeated_on_every_property_row():
@@ -192,8 +201,14 @@ def test_search_info_repeated_on_every_property_row():
     table = HotelsTransformer().transform(make_payload(props))
 
     assert table.num_rows == 3
-    assert table.column("search_metadata_id").to_pylist() == ["6ac84eebb8b4a5d8e3c9e593"] * 3
-    assert table.column("search_parameters_q").to_pylist() == ["San Antonio, United States"] * 3
+    assert (
+        table.column("search_metadata_id").to_pylist()
+        == ["6ac84eebb8b4a5d8e3c9e593"] * 3
+    )
+    assert (
+        table.column("search_parameters_q").to_pylist()
+        == ["San Antonio, United States"] * 3
+    )
     assert table.column("name").to_pylist() == ["A", "B", "C"]
 
 
@@ -223,7 +238,9 @@ def test_parses_legacy_utc_timestamp_format():
     payload["search_metadata"]["created_at"] = "2026-10-09 02:18:19 UTC"
     row = HotelsTransformer().transform(payload).to_pylist()[0]
 
-    assert row["search_metadata_created_at"] == datetime(2026, 10, 9, 2, 18, 19, tzinfo=timezone.utc)
+    assert row["search_metadata_created_at"] == datetime(
+        2026, 10, 9, 2, 18, 19, tzinfo=timezone.utc
+    )
 
 
 def test_unexpected_fields_kept_as_strings():
@@ -234,7 +251,9 @@ def test_unexpected_fields_kept_as_strings():
     assert table.column("search_parameters_sort_by").to_pylist() == ["3"]
 
 
-@pytest.mark.parametrize("missing", ["search_metadata", "search_parameters", "properties"])
+@pytest.mark.parametrize(
+    "missing", ["search_metadata", "search_parameters", "properties"]
+)
 def test_rejects_payload_without_required_section(missing):
     payload = make_payload()
     del payload[missing]
@@ -243,29 +262,56 @@ def test_rejects_payload_without_required_section(missing):
         HotelsTransformer().transform(payload)
 
 
-# ---------------------------------------------------------------------------
 # RawObjectLocator
-# ---------------------------------------------------------------------------
 def test_locator_lists_every_json_in_todays_partition():
-    s3 = FakeS3(pages=[
-        {"Contents": [{"Key": RAW_KEY}, {"Key": "ingest_date=2026-10-09/notes.txt"}]},
-        {"Contents": [{"Key": OTHER_KEY}]},
-    ])
-    locator = RawObjectLocator("raw-bucket", "", client=s3, today=lambda: date(2026, 10, 9))
+    s3 = FakeS3(
+        pages=[
+            {
+                "Contents": [
+                    {"Key": RAW_KEY},
+                    {"Key": "extract_date=2026-10-09/notes.txt"},
+                ]
+            },
+            {"Contents": [{"Key": OTHER_KEY}]},
+        ]
+    )
+    locator = RawObjectLocator(
+        "raw-bucket", "", client=s3, today=lambda: date(2026, 10, 9)
+    )
 
     assert locator.locate({}) == ("raw-bucket", [OTHER_KEY, RAW_KEY])
-    assert s3.paginator.calls == [{"Bucket": "raw-bucket", "Prefix": "ingest_date=2026-10-09/"}]
+    assert s3.paginator.calls == [
+        {"Bucket": "raw-bucket", "Prefix": "extract_date=2026-10-09/"}
+    ]
 
 
-def test_locator_uses_extract_lambda_output_bucket_and_ingest_date():
-    s3 = FakeS3(pages=[{"Contents": [{"Key": "hotel_room_rates/ingest_date=2026-10-01/hotels_X.json"}]}])
+def test_locator_uses_extract_lambda_output_bucket_and_extract_date():
+    s3 = FakeS3(
+        pages=[
+            {
+                "Contents": [
+                    {"Key": "hotel_room_rates/extract_date=2026-10-01/hotels_X.json"}
+                ]
+            }
+        ]
+    )
     locator = RawObjectLocator("raw-bucket", "hotel_room_rates/", client=s3)
 
-    bucket, keys = locator.locate({"Payload": {"bucket": "other-raw", "ingest_date": "2026-10-01", "written": []}})
+    bucket, keys = locator.locate(
+        {
+            "Payload": {
+                "bucket": "other-raw",
+                "extract_date": "2026-10-01",
+                "written": [],
+            }
+        }
+    )
 
     assert bucket == "other-raw"
-    assert keys == ["hotel_room_rates/ingest_date=2026-10-01/hotels_X.json"]
-    assert s3.paginator.calls[0]["Prefix"] == "hotel_room_rates/ingest_date=2026-10-01/"
+    assert keys == ["hotel_room_rates/extract_date=2026-10-01/hotels_X.json"]
+    assert (
+        s3.paginator.calls[0]["Prefix"] == "hotel_room_rates/extract_date=2026-10-01/"
+    )
 
 
 def test_locator_single_key_and_s3_notification():
@@ -278,31 +324,36 @@ def test_locator_single_key_and_s3_notification():
 
 
 def test_locator_errors_on_empty_partition():
-    locator = RawObjectLocator("raw-bucket", client=FakeS3(pages=[{}]), today=lambda: date(2026, 10, 9))
+    locator = RawObjectLocator(
+        "raw-bucket", client=FakeS3(pages=[{}]), today=lambda: date(2026, 10, 9)
+    )
 
-    with pytest.raises(ValueError, match="ingest_date=2026-10-09"):
+    with pytest.raises(ValueError, match="extract_date=2026-10-09"):
         locator.locate({})
 
 
-# ---------------------------------------------------------------------------
 # TransformedKeyBuilder
-# ---------------------------------------------------------------------------
 def test_key_builder_mirrors_partition_and_swaps_extension():
-    assert TransformedKeyBuilder("", "").build(RAW_KEY) == RAW_KEY[: -len(".json")] + ".parquet"
     assert (
-        TransformedKeyBuilder("hotel_room_rates/", "hotels/").build("hotel_room_rates/ingest_date=2026-10-09/h.json")
-        == "hotels/ingest_date=2026-10-09/h.parquet"
+        TransformedKeyBuilder("", "").build(RAW_KEY)
+        == RAW_KEY[: -len(".json")] + ".parquet"
+    )
+    assert (
+        TransformedKeyBuilder("hotel_room_rates/", "hotels/").build(
+            "hotel_room_rates/extract_date=2026-10-09/h.json"
+        )
+        == "hotels/extract_date=2026-10-09/h.parquet"
     )
 
 
-# ---------------------------------------------------------------------------
 # TransformService
-# ---------------------------------------------------------------------------
 def test_service_transforms_every_file_in_partition():
     s3 = FakeS3(
         objects={
             ("raw-bucket", RAW_KEY): json.dumps(make_payload()).encode(),
-            ("raw-bucket", OTHER_KEY): json.dumps(make_payload([make_property(), make_property()])).encode(),
+            ("raw-bucket", OTHER_KEY): json.dumps(
+                make_payload([make_property(), make_property()])
+            ).encode(),
         },
         pages=[{"Contents": [{"Key": RAW_KEY}, {"Key": OTHER_KEY}]}],
     )
@@ -338,7 +389,10 @@ def test_service_skips_bad_file_and_reports_partial():
 
 
 def test_service_raises_when_every_file_fails():
-    s3 = FakeS3(objects={("raw-bucket", RAW_KEY): b"{}"}, pages=[{"Contents": [{"Key": RAW_KEY}]}])
+    s3 = FakeS3(
+        objects={("raw-bucket", RAW_KEY): b"{}"},
+        pages=[{"Contents": [{"Key": RAW_KEY}]}],
+    )
 
     with pytest.raises(TransformError):
         build_service(s3).run({})
@@ -348,5 +402,7 @@ def test_config_requires_both_buckets(monkeypatch):
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "raw")
     monkeypatch.delenv("AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET", raising=False)
 
-    with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET"):
+    with pytest.raises(
+        ValueError, match="AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET"
+    ):
         TransformConfig.from_env()
