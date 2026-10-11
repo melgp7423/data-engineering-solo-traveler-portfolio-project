@@ -1,24 +1,7 @@
 """
-Lambda: read every raw Geoapify Places JSON page in one ingest_date partition
+Lambda: read every raw Geoapify Places JSON page in one extract_date partition
 from S3, keep only complete activities and the fields the pipeline needs,
-group them by county, and write one Parquet file per county back to S3 —
-OOP / Single Responsibility Principle.
-
-Input  (raw bucket):         <RAW_PREFIX>ingest_date=YYYY-MM-DD/places_HHMMSS_<run>_page000.json   (one or more pages per run)
-Output (transformed bucket): <TRANSFORMED_PREFIX>ingest_date=YYYY-MM-DD/activities-wayne_county-michigan.parquet
-                             (activities-COUNTY-STATE, one per county + state; may hold several cities)
-
-The geocode_*.json files in the same partition are ignored.
-
-A feature is kept only if its "properties" has a non-empty value for every
-one of: name, country_code, state, county, city, formatted, categories
-(a non-empty list). Anything else is dropped. A county's activities can be
-spread across several pages, so all pages in the partition are read before
-grouping.
-
-Output layout: one row per activity (columnar):
-
-    name, country_code, state, county, city, formatted, categories (list of strings)
+group them by county and write one Parquet file per county back to S3
 
 Classes and their one job:
     TransformConfig            -> read & validate settings
@@ -34,18 +17,16 @@ Classes and their one job:
 Environment variables (placeholders shown):
     AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET           = <YOUR_RAW_BUCKET_NAME>
     AWS_DESTINATION_ACTIVITIES_TRANSFORMED_DATA_S3_BUCKET   = <YOUR_TRANSFORMED_BUCKET_NAME>
-    RAW_PREFIX                                              = ""   folder above ingest_date= in the raw bucket ("" = bucket root)
-    TRANSFORMED_PREFIX                                      = ""   folder above ingest_date= in the transformed bucket
+    RAW_PREFIX                                              = ""   folder above extract_date= in the raw bucket ("" = bucket root)
+    TRANSFORMED_PREFIX                                      = ""   folder above extract_date= in the transformed bucket
 
 Supported events:
-    Step Functions (output of the extract Lambda):  {"bucket": "...", "places_keys": [...], "ingest_date": "YYYY-MM-DD", ...}
+    Step Functions (output of the extract Lambda):  {"bucket": "...", "places_keys": [...], "extract_date": "YYYY-MM-DD", ...}
                                                     -> those places pages
     Schedule / manual test ({}):                    every places_*.json in today's (UTC) partition
-    Another day:                                    {"ingest_date": "YYYY-MM-DD"}
+    Another day:                                    {"extract_date": "YYYY-MM-DD"}
     One file only:                                  {"bucket": "...", "key": "..."}
     S3 ObjectCreated notification:                  {"Records": [{"s3": {...}}]} -> those files
-
-Requires pyarrow (see requirements.txt).
 """
 
 import io
@@ -68,12 +49,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class TransformConfig:
-    """Holds and validates all runtime settings."""
 
     aws_destination_activities_raw_data_s3_bucket: str
     aws_destination_activities_transformed_data_s3_bucket: str
@@ -82,7 +60,6 @@ class TransformConfig:
 
     @staticmethod
     def _bucket_from_env(name: str) -> str:
-        """Read a bucket env var, accepting a bare name or an ARN (arn:aws:s3:::<bucket>)."""
         value = os.environ.get(name, "").strip()
         if value.startswith("arn:"):
             value = value.split(":::", 1)[-1]
@@ -112,37 +89,22 @@ class TransformConfig:
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
 
 
 def _folder(prefix: str) -> str:
-    """Normalize a prefix to "" (bucket root) or "some/folder/"."""
     prefix = prefix.strip("/")
     return f"{prefix}/" if prefix else ""
 
 
 def _is_places_key(key: str) -> bool:
-    """Only the places_*.json pages hold activities; geocode_*.json does not."""
     return posixpath.basename(key).startswith("places_") and key.endswith(".json")
 
 
-# ---------------------------------------------------------------------------
 # Locating the input
-# ---------------------------------------------------------------------------
 class RawObjectLocator:
-    """
-    Works out which raw places pages to transform. Accepted shapes:
-      - Step Functions lambda:invoke result, which wraps the payload:
-        {"Payload": {...}, "StatusCode": 200, ...}
-      - extract_destination_activities output: {"bucket", "places_keys": [...]}
-      - S3 notification: {"Records": [{"s3": ...}, ...]} with URL-encoded keys
-      - S3 event via EventBridge: {"detail": {"bucket": {"name"}, "object": {"key"}}}
-      - a single file: {"bucket", "key"}
-      - otherwise every places_*.json under <raw_prefix>ingest_date=<date>/,
-        where <date> is the event's "ingest_date" or today in UTC
-    The bucket falls back to the configured raw bucket when the event has none.
-    Keys that aren't places pages (e.g. geocode_*.json) are skipped.
-    """
 
     def __init__(
         self,
@@ -174,7 +136,9 @@ class RawObjectLocator:
         if records:
             # S3 notifications URL-encode keys ("=" -> "%3D", spaces -> "+").
             bucket = records[0]["s3"]["bucket"]["name"]
-            return bucket, [urllib.parse.unquote_plus(r["s3"]["object"]["key"]) for r in records]
+            return bucket, [
+                urllib.parse.unquote_plus(r["s3"]["object"]["key"]) for r in records
+            ]
 
         detail = event.get("detail")
         if isinstance(detail, dict) and "object" in detail:
@@ -187,29 +151,34 @@ class RawObjectLocator:
         key = event.get("key")
         if key:
             return bucket, [key]
-        ingest_date = event.get("ingest_date") or f"{self._today():%Y-%m-%d}"
-        return bucket, self._partition_keys(bucket, ingest_date)
+        extract_date = event.get("extract_date") or f"{self._today():%Y-%m-%d}"
+        return bucket, self._partition_keys(bucket, extract_date)
 
-    def _partition_keys(self, bucket: str, ingest_date: str) -> List[str]:
-        partition = f"{self._raw_prefix}ingest_date={ingest_date}/"
+    def _partition_keys(self, bucket: str, extract_date: str) -> List[str]:
+        partition = f"{self._raw_prefix}extract_date={extract_date}/"
         client = self._client or boto3.client("s3")
         keys = []
-        for page in client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=partition):
-            keys.extend(obj["Key"] for obj in page.get("Contents", []) if _is_places_key(obj["Key"]))
+        for page in client.get_paginator("list_objects_v2").paginate(
+            Bucket=bucket, Prefix=partition
+        ):
+            keys.extend(
+                obj["Key"]
+                for obj in page.get("Contents", [])
+                if _is_places_key(obj["Key"])
+            )
         if not keys:
             raise ValueError(
                 f"s3://{bucket}/{partition} has no places_*.json files — "
-                "run extract_destination_activities first or pass {'ingest_date'} / {'bucket', 'key'}"
+                "run extract_destination_activities first or pass {'extract_date'} / {'bucket', 'key'}"
             )
-        logger.info("Found %d raw places files in s3://%s/%s", len(keys), bucket, partition)
+        logger.info(
+            "Found %d raw places files in s3://%s/%s", len(keys), bucket, partition
+        )
         return sorted(keys)
 
 
-# ---------------------------------------------------------------------------
 # S3 read
-# ---------------------------------------------------------------------------
 class S3RawReader:
-    """Reads and parses a raw JSON object from S3."""
 
     def __init__(self, client=None):
         self._client = client or boto3.client("s3")
@@ -220,39 +189,35 @@ class S3RawReader:
         return json.loads(body)
 
 
-# ---------------------------------------------------------------------------
 # Transformation
-# ---------------------------------------------------------------------------
 class InvalidRawPayloadError(Exception):
     """Raised when the raw JSON is missing the sections we need."""
 
 
 class ActivitiesTransformer:
-    """
-    Turns a Places FeatureCollection into clean activity rows. A feature is
-    kept only when its properties has a non-empty name, country_code, state,
-    county, city and formatted, and a non-empty categories list; every
-    category string is kept as-is.
-    """
 
     STRING_FIELDS = ("name", "country_code", "state", "county", "city", "formatted")
 
-    SCHEMA = pa.schema([
-        pa.field("name", pa.string()),
-        pa.field("country_code", pa.string()),
-        pa.field("state", pa.string()),
-        pa.field("county", pa.string()),
-        pa.field("city", pa.string()),
-        pa.field("formatted", pa.string()),
-        pa.field("categories", pa.list_(pa.string())),
-    ])
+    SCHEMA = pa.schema(
+        [
+            pa.field("name", pa.string()),
+            pa.field("country_code", pa.string()),
+            pa.field("state", pa.string()),
+            pa.field("county", pa.string()),
+            pa.field("city", pa.string()),
+            pa.field("formatted", pa.string()),
+            pa.field("categories", pa.list_(pa.string())),
+        ]
+    )
 
     def transform(self, payload: Dict) -> List[Dict[str, object]]:
         features = payload.get("features") if isinstance(payload, dict) else None
         if not isinstance(features, list):
             raise InvalidRawPayloadError("Raw payload has no features array")
 
-        rows = [row for row in (self._clean_feature(f) for f in features) if row is not None]
+        rows = [
+            row for row in (self._clean_feature(f) for f in features) if row is not None
+        ]
         logger.info("Kept %d of %d features", len(rows), len(features))
         return rows
 
@@ -278,14 +243,6 @@ class ActivitiesTransformer:
 
 
 class CountyGrouper:
-    """
-    Groups rows by (partition, county, state) and builds one Table per group,
-    matching the activities-COUNTY-STATE file name. State is part of the key
-    because county names repeat across states (e.g. "Washington County"). The
-    partition is the raw key's folder (e.g. "ingest_date=2026-10-09"), so
-    pages from different days never end up in the same file. The same place
-    showing up on two pages or in two runs that day is only kept once.
-    """
 
     def __init__(self, schema: pa.Schema = ActivitiesTransformer.SCHEMA):
         self._schema = schema
@@ -310,25 +267,19 @@ class CountyGrouper:
         }
 
 
-# ---------------------------------------------------------------------------
 # S3 write
-# ---------------------------------------------------------------------------
 class TransformedKeyBuilder:
-    """
-    Puts each county's file in the same ingest_date= partition as its raw
-    pages, under the transformed prefix, named activities-COUNTY-STATE.
-    "-" separates the parts, so spaces and punctuation inside a part become "_":
-        ingest_date=2026-10-09/places_021651_fde87987_page000.json
-        (county "Wayne County", state "Michigan")
-     -> ingest_date=2026-10-09/activities-wayne_county-michigan.parquet
-    """
 
     def __init__(self, raw_prefix: str, transformed_prefix: str):
         self._raw_prefix = _folder(raw_prefix)
         self._transformed_prefix = _folder(transformed_prefix)
 
     def partition(self, raw_key: str) -> str:
-        relative = raw_key[len(self._raw_prefix):] if raw_key.startswith(self._raw_prefix) else raw_key
+        relative = (
+            raw_key[len(self._raw_prefix) :]
+            if raw_key.startswith(self._raw_prefix)
+            else raw_key
+        )
         return posixpath.dirname(relative)
 
     def build(self, partition: str, county: str, state: str) -> str:
@@ -344,7 +295,6 @@ class TransformedKeyBuilder:
 
 
 class S3ParquetWriter:
-    """Serializes a Table to Snappy-compressed Parquet and writes it to S3."""
 
     def __init__(self, bucket: str, client=None):
         self._bucket = bucket
@@ -366,9 +316,7 @@ class S3ParquetWriter:
         return key
 
 
-# ---------------------------------------------------------------------------
 # Orchestration
-# ---------------------------------------------------------------------------
 class TransformError(Exception):
     """Raised when every raw file failed to transform, or nothing was left to write."""
 
@@ -399,18 +347,24 @@ class TransformService:
         read, failed = [], []
         for raw_key in raw_keys:
             try:
-                rows = self._transformer.transform(self._reader.read(raw_bucket, raw_key))
+                rows = self._transformer.transform(
+                    self._reader.read(raw_bucket, raw_key)
+                )
             except (InvalidRawPayloadError, ValueError) as err:
                 # One bad page shouldn't throw away the others.
                 # (json.JSONDecodeError is a ValueError.)
-                logger.error("Could not transform s3://%s/%s: %s", raw_bucket, raw_key, err)
+                logger.error(
+                    "Could not transform s3://%s/%s: %s", raw_bucket, raw_key, err
+                )
                 failed.append({"source_key": raw_key, "error": str(err)})
                 continue
             rows_by_partition[self._key_builder.partition(raw_key)].extend(rows)
             read.append(raw_key)
 
         if not read:
-            raise TransformError(f"All {len(failed)} raw places files failed to transform: {failed}")
+            raise TransformError(
+                f"All {len(failed)} raw places files failed to transform: {failed}"
+            )
 
         tables = self._grouper.group(rows_by_partition)
         if not tables:
@@ -418,17 +372,25 @@ class TransformService:
 
         written = []
         for (partition, county, state), table in tables.items():
-            key = self._writer.write(self._key_builder.build(partition, county, state), table)
+            key = self._writer.write(
+                self._key_builder.build(partition, county, state), table
+            )
             logger.info(
                 "Wrote %d activities for %s, %s to s3://%s/%s",
-                table.num_rows, county, state, self._writer.bucket, key,
+                table.num_rows,
+                county,
+                state,
+                self._writer.bucket,
+                key,
             )
-            written.append({
-                "county": county,
-                "state": state,
-                "key": key,
-                "row_count": table.num_rows,
-            })
+            written.append(
+                {
+                    "county": county,
+                    "state": state,
+                    "key": key,
+                    "row_count": table.num_rows,
+                }
+            )
 
         return {
             "status": "PARTIAL" if failed else "SUCCEEDED",
@@ -443,14 +405,17 @@ class TransformService:
 
 
 def build_service(config: TransformConfig) -> TransformService:
-    """Composition root: the only place that wires the pieces together."""
     return TransformService(
-        locator=RawObjectLocator(config.aws_destination_activities_raw_data_s3_bucket, config.raw_prefix),
+        locator=RawObjectLocator(
+            config.aws_destination_activities_raw_data_s3_bucket, config.raw_prefix
+        ),
         reader=S3RawReader(),
         transformer=ActivitiesTransformer(),
         grouper=CountyGrouper(),
         key_builder=TransformedKeyBuilder(config.raw_prefix, config.transformed_prefix),
-        writer=S3ParquetWriter(config.aws_destination_activities_transformed_data_s3_bucket),
+        writer=S3ParquetWriter(
+            config.aws_destination_activities_transformed_data_s3_bucket
+        ),
     )
 
 

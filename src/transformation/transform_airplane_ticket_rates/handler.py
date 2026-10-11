@@ -1,19 +1,6 @@
 """
 Lambda: read one raw Google Flights deals JSON file from S3, keep only the
-fields the pipeline needs, and write it back to S3 as Parquet — OOP / Single
-Responsibility Principle.
-
-Input  (raw bucket):        airplane_ticket_rates/ingest_date=YYYY-MM-DD/deals_....json
-Output (transformed bucket): airplane_ticket_rates/ingest_date=YYYY-MM-DD/deals_....parquet
-
-Output layout: one row per deal (columnar). Every field in search_metadata
-is kept and repeated on each row with a "search_metadata_" prefix, so each
-deal row carries the search it came from:
-
-    search_metadata_id, search_metadata_status, ..., search_metadata_total_time_taken,
-    name, price, outbound_date, return_date, flight_duration, description
-
-An empty or missing description becomes "NO DESCRIPTION".
+fields the pipeline needs and write it back to S3 as Parquet
 
 Classes and their one job:
     TransformConfig          -> read & validate settings
@@ -35,10 +22,8 @@ Supported events:
     Step Functions (output of the extract Lambda): {"bucket": "...", "key": "..."}
     S3 ObjectCreated notification:                 {"Records": [{"s3": {...}}]}
     Schedule / manual test with no key ({}):       newest .json in today's
-                                                   ingest_date partition
-    Same, for another day:                         {"ingest_date": "YYYY-MM-DD"}
-
-Requires pyarrow (see requirements.txt).
+                                                   extract_date partition
+    Same, for another day:                         {"extract_date": "YYYY-MM-DD"}
 """
 
 import io
@@ -58,12 +43,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class TransformConfig:
-    """Holds and validates all runtime settings."""
 
     aws_airplane_ticket_raw_data_s3_bucket: str
     aws_airplane_ticket_transformed_data_s3_bucket: str
@@ -72,7 +54,6 @@ class TransformConfig:
 
     @staticmethod
     def _bucket_from_env(name: str) -> str:
-        """Read a bucket env var, accepting a bare name or an ARN (arn:aws:s3:::<bucket>)."""
         value = os.environ.get(name, "").strip()
         if value.startswith("arn:"):
             value = value.split(":::", 1)[-1]
@@ -81,12 +62,16 @@ class TransformConfig:
     @classmethod
     def from_env(cls) -> "TransformConfig":
         config = cls(
-            aws_airplane_ticket_raw_data_s3_bucket=cls._bucket_from_env("AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET"),
+            aws_airplane_ticket_raw_data_s3_bucket=cls._bucket_from_env(
+                "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET"
+            ),
             aws_airplane_ticket_transformed_data_s3_bucket=cls._bucket_from_env(
                 "AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET"
             ),
             raw_prefix=os.environ.get("RAW_PREFIX", "airplane_ticket_rates/"),
-            transformed_prefix=os.environ.get("TRANSFORMED_PREFIX", "airplane_ticket_rates/"),
+            transformed_prefix=os.environ.get(
+                "TRANSFORMED_PREFIX", "airplane_ticket_rates/"
+            ),
         )
         config.validate()
         return config
@@ -98,27 +83,13 @@ class TransformConfig:
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
-            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+            raise ValueError(
+                f"Missing required environment variables: {', '.join(missing)}"
+            )
 
 
-# ---------------------------------------------------------------------------
 # Locating the input
-# ---------------------------------------------------------------------------
 class RawObjectLocator:
-    """
-    Works out which raw object to transform. Accepted shapes:
-      - extract Lambda output passed straight through: {"bucket", "key"}
-      - Step Functions lambda:invoke result, which wraps that output:
-        {"Payload": {"bucket", "key"}, "StatusCode": 200, ...}
-      - S3 notification: {"Records": [{"s3": ...}]} with a URL-encoded key
-      - S3 event via EventBridge: {"detail": {"bucket": {"name"}, "object": {"key"}}}
-      - no key at all (schedule, console test): the newest .json under
-        <raw_prefix>/ingest_date=<today UTC>/ in the raw bucket, or under the
-        event's "ingest_date" partition when it gives one
-    The bucket falls back to the configured raw bucket when the event only
-    carries a key.
-    """
-
     def __init__(
         self,
         default_bucket: str,
@@ -141,7 +112,6 @@ class RawObjectLocator:
         records = event.get("Records")
         if records:
             s3 = records[0]["s3"]
-            # S3 notifications URL-encode keys ("=" -> "%3D", spaces -> "+").
             return s3["bucket"]["name"], urllib.parse.unquote_plus(s3["object"]["key"])
 
         detail = event.get("detail")
@@ -151,15 +121,21 @@ class RawObjectLocator:
         key = event.get("key")
         if key:
             return event.get("bucket") or self._default_bucket, key
-        return self._default_bucket, self._latest_key(event.get("ingest_date") or f"{self._today():%Y-%m-%d}")
+        return self._default_bucket, self._latest_key(
+            event.get("extract_date") or f"{self._today():%Y-%m-%d}"
+        )
 
-    def _latest_key(self, ingest_date: str) -> str:
-        partition = f"{self._raw_prefix}/ingest_date={ingest_date}/"
+    def _latest_key(self, extract_date: str) -> str:
+        partition = f"{self._raw_prefix}/extract_date={extract_date}/"
         client = self._client or boto3.client("s3")
         latest = None
-        for page in client.get_paginator("list_objects_v2").paginate(Bucket=self._default_bucket, Prefix=partition):
+        for page in client.get_paginator("list_objects_v2").paginate(
+            Bucket=self._default_bucket, Prefix=partition
+        ):
             for obj in page.get("Contents", []):
-                if obj["Key"].endswith(".json") and (latest is None or obj["LastModified"] > latest["LastModified"]):
+                if obj["Key"].endswith(".json") and (
+                    latest is None or obj["LastModified"] > latest["LastModified"]
+                ):
                     latest = obj
         if latest is None:
             raise ValueError(
@@ -170,11 +146,8 @@ class RawObjectLocator:
         return latest["Key"]
 
 
-# ---------------------------------------------------------------------------
 # S3 read
-# ---------------------------------------------------------------------------
 class S3RawReader:
-    """Reads and parses a raw JSON object from S3."""
 
     def __init__(self, client=None):
         self._client = client or boto3.client("s3")
@@ -185,26 +158,16 @@ class S3RawReader:
         return json.loads(body)
 
 
-# ---------------------------------------------------------------------------
 # Transformation
-# ---------------------------------------------------------------------------
 class InvalidRawPayloadError(Exception):
     """Raised when the raw JSON is missing the sections we need."""
 
 
 class DealsTransformer:
-    """
-    Flattens the raw payload into one row per deal. All of search_metadata
-    is kept and copied onto every row; from each deal only DEAL_FIELDS are
-    kept. Columns get explicit types so every file has the same schema for
-    Glue/Athena, no matter which optional fields a given response contains.
-    """
 
     METADATA_PREFIX = "search_metadata_"
     NO_DESCRIPTION = "NO DESCRIPTION"
 
-    # Known search_metadata fields and their types. Any other field SerpApi
-    # adds later is still kept, as a string column (see _metadata_columns).
     METADATA_FIELDS = {
         "id": pa.string(),
         "status": pa.string(),
@@ -221,8 +184,6 @@ class DealsTransformer:
     DEAL_FIELDS = {
         "name": pa.string(),
         "price": pa.int64(),
-        # Plain "YYYY-MM-DD" strings: date32 columns render as
-        # "2026-10-15T00:00:00.000Z" in many Parquet viewers.
         "outbound_date": pa.string(),
         "return_date": pa.string(),
         "flight_duration": pa.int64(),  # minutes
@@ -251,7 +212,9 @@ class DealsTransformer:
 
         return pa.Table.from_pydict(columns, schema=pa.schema(fields))
 
-    def _metadata_columns(self, metadata: Dict) -> Dict[str, Tuple[object, pa.DataType]]:
+    def _metadata_columns(
+        self, metadata: Dict
+    ) -> Dict[str, Tuple[object, pa.DataType]]:
         columns = {}
         for field_name, arrow_type in self.METADATA_FIELDS.items():
             value = metadata.get(field_name)
@@ -260,8 +223,14 @@ class DealsTransformer:
             columns[self.METADATA_PREFIX + field_name] = (value, arrow_type)
         for field_name, value in metadata.items():
             if field_name not in self.METADATA_FIELDS:
-                logger.warning("Unexpected search_metadata field %r kept as string", field_name)
-                text = value if isinstance(value, str) or value is None else json.dumps(value)
+                logger.warning(
+                    "Unexpected search_metadata field %r kept as string", field_name
+                )
+                text = (
+                    value
+                    if isinstance(value, str) or value is None
+                    else json.dumps(value)
+                )
                 columns[self.METADATA_PREFIX + field_name] = (text, pa.string())
         return columns
 
@@ -278,41 +247,35 @@ class DealsTransformer:
 
     @staticmethod
     def _parse_date(value: Optional[str]) -> Optional[str]:
-        # Validate and keep only the YYYY-MM-DD part, dropping any time / "Z" suffix.
         return date.fromisoformat(value[:10]).isoformat() if value else None
 
     @staticmethod
     def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
-        # SerpApi format: "2026-10-07 00:47:06 UTC"
         if not value:
             return None
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=timezone.utc)
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S UTC").replace(
+            tzinfo=timezone.utc
+        )
 
 
-# ---------------------------------------------------------------------------
 # S3 write
-# ---------------------------------------------------------------------------
 class TransformedKeyBuilder:
-    """
-    Mirrors the raw key under the transformed prefix and swaps .json for
-    .parquet, so the ingest_date= partition and file name carry over:
-        airplane_ticket_rates/ingest_date=2026-10-07/deals_PHX_....json
-     -> airplane_ticket_rates/ingest_date=2026-10-07/deals_PHX_....parquet
-    """
 
     def __init__(self, raw_prefix: str, transformed_prefix: str):
         self._raw_prefix = raw_prefix.rstrip("/") + "/"
         self._transformed_prefix = transformed_prefix.rstrip("/") + "/"
 
     def build(self, raw_key: str) -> str:
-        relative = raw_key[len(self._raw_prefix):] if raw_key.startswith(self._raw_prefix) else raw_key
+        relative = (
+            raw_key[len(self._raw_prefix) :]
+            if raw_key.startswith(self._raw_prefix)
+            else raw_key
+        )
         stem = relative[: -len(".json")] if relative.endswith(".json") else relative
         return f"{self._transformed_prefix}{stem}.parquet"
 
 
 class S3ParquetWriter:
-    """Serializes a Table to Snappy-compressed Parquet and writes it to S3."""
-
     def __init__(self, bucket: str, client=None):
         self._bucket = bucket
         self._client = client or boto3.client("s3")
@@ -333,9 +296,7 @@ class S3ParquetWriter:
         return key
 
 
-# ---------------------------------------------------------------------------
 # Orchestration
-# ---------------------------------------------------------------------------
 class TransformService:
     """Coordinates locate -> read -> transform -> name -> store."""
 
@@ -359,7 +320,9 @@ class TransformService:
         table = self._transformer.transform(payload)
         key = self._writer.write(self._key_builder.build(raw_key), table)
 
-        logger.info("Wrote %d deals to s3://%s/%s", table.num_rows, self._writer.bucket, key)
+        logger.info(
+            "Wrote %d deals to s3://%s/%s", table.num_rows, self._writer.bucket, key
+        )
         return {
             "status": "SUCCEEDED",
             "source_bucket": raw_bucket,
@@ -372,9 +335,11 @@ class TransformService:
 
 
 def build_service(config: TransformConfig) -> TransformService:
-    """Composition root: the only place that wires the pieces together."""
+
     return TransformService(
-        locator=RawObjectLocator(config.aws_airplane_ticket_raw_data_s3_bucket, config.raw_prefix),
+        locator=RawObjectLocator(
+            config.aws_airplane_ticket_raw_data_s3_bucket, config.raw_prefix
+        ),
         reader=S3RawReader(),
         transformer=DealsTransformer(),
         key_builder=TransformedKeyBuilder(config.raw_prefix, config.transformed_prefix),
