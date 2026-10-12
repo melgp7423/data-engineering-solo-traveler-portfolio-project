@@ -7,7 +7,8 @@
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
 - [Data Sources](#data-sources)
-- [CI/CD Pipeline](#ci/cd-pipeline)
+- [Setup](#setup)
+- [CI/CD Pipeline](#cicd-pipeline)
 - [Usage](#usage)
 
 ## Overview
@@ -40,7 +41,7 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 - Amazon Aurora Serverless (gold layer)
 - AWS Glue Data Catalog
 - Amazon Athena
-- Amazon Quick Suite
+- Amazon Quick Sight
 - GitHub Actions (CI/CD)
 
 ## Architecture
@@ -121,7 +122,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
                                      │
                      Athena (via the Glue Data Catalog)
                                      │
-                             Amazon Quick Suite
+                             Amazon Quick Sight
 ```
 
 1. **EventBridge** runs a daily schedule that starts the Step Functions workflow, so the full ETL pipeline runs every day with no manual steps.
@@ -186,6 +187,51 @@ Each Lambda folder contains:
 | Hotel room costs        | [SerpApi – Google Hotels API](https://serpapi.com/google-hotels-api)                    |
 | Destination activities  | [Geoapify – Travel & Tourism APIs](https://www.geoapify.com/industries/travel-tourism/) |
 
+## Setup
+
+### CI/CD Pipeline key
+
+| Category                   | Stored in                           | Repository secret     |
+| -------------------------- | ----------------------------------- | --------------------- |
+| AWS IAM Role OIDC Provider | `github actions repository secrets` | `AWS_DEPLOY_ROLE_ARN` |
+
+### API keys
+
+The extraction Lambdas need three API keys. The keys are stored in **AWS Secrets Manager**. Each Lambda has an environment variable that holds the name of its secret and the Lambda reads the key from Secrets Manager when it runs.
+
+| API            | Used by                                                     | Lambda environment variable |
+| -------------- | ----------------------------------------------------------- | --------------------------- |
+| SerpApi        | `extract_airplane_ticket_rates`, `extract_hotel_room_rates` | `API_KEY_SECRET`            |
+| Exchange Rates | `extract_exchange_rates`                                    | `ACCESS_KEY_SECRET`         |
+| Geoapify       | `extract_destination_activities`                            | `API_KEY_SECRET`            |
+
+### AWS ARN keys
+
+The extraction, transformation and load Lambda functions use environment variables to reference the ARNs of the AWS S3 buckets and the Aurora cluster they read from and write to. These values are kept in a local .env file and set on each Lambda function's configuration in AWS, so account-specific resource identifiers aren't exposed.
+
+| ENV Type           | Used by                                                                                              | Environment variable                                                |
+| ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_EXCHANGE_RATES_ARN`                                    |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN`                             |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_HOTEL_ROOM_RATES_ARN`                                  |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN`                            |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_EXCHANGE_RATES_ARN`                                  |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN`                           |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN`                                |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN`                          |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_ARN`     |
+| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_LOAD_COMBINED_DATASET_AURORA_ARN`                              |
+| S3 BUCKET ARN      | `extract_exchange_rates`,<br>`transform_exchange_rates`                                              | `AWS_EXCHANGE_RATES_RAW_DATA_S3_BUCKET`                             |
+| S3 BUCKET ARN      | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates` | `AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET`                            |
+| S3 BUCKET ARN      | `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`     | `AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET`                           |
+| S3 BUCKET ARN      | `extract_destination_activities`,<br>`transform_destination_activities`                              | `AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET`                     |
+| S3 BUCKET ARN      | `transform_exchange_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`               | `AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET`                     |
+| S3 BUCKET ARN      | `transform_airplane_ticket_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`        | `AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET`                    |
+| S3 BUCKET ARN      | `transform_hotel_room_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`             | `AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET`                   |
+| S3 BUCKET ARN      | `transform_destination_activities`,<br>`transform_combine_airplane_hotel_destination_datasets`       | `AWS_DESTINATION_ACTIVIES_TRANSFORMED_DATA_S3_BUCKET`               |
+| S3 BUCKET ARN      | `transform_combine_airplane_hotel_destination_datasets`,<br>`load_gold_layer`                        | `AWS_COMBINE_AIRPLANE_HOTEL_DESTINATION_TRANSFORMED_DATA_S3_BUCKET` |
+| AURORA CLUSTER ARN | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates` REVIEW                                | `AWS_GOLD_LAYER_AURORA_SERVERLESS_CLUSTER`                          |
+
 ## CI/CD Pipeline
 
 Every Lambda function is tested and deployed automatically with **GitHub Actions**. The workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
@@ -240,51 +286,6 @@ Jobs use `fail-fast: false`, so one Lambda failing its tests or deploy doesn't c
 2. Add its test file at `tests/<stage>/test_<lambda_name>.py`.
 3. Add a repository secret with the function's ARN, for example `AWS_TRANSFORM_EXCHANGE_RATES_ARN`.
 4. In `deploy.yaml`, add the Lambda to `FUNCTION_NAMES`, to the `paths-filter` filters and to the manual-run list in the `detect-changes` job.
-
-## Setup
-
-### CI/CD Pipeline key
-
-| Category                   | Stored in                           | Repository secret     |
-| -------------------------- | ----------------------------------- | --------------------- |
-| AWS IAM Role OIDC Provider | `github actions repository secrets` | `AWS_DEPLOY_ROLE_ARN` |
-
-### API keys
-
-The extraction Lambdas need three API keys. The keys are stored in **AWS Secrets Manager**. Each Lambda has an environment variable that holds the name of its secret and the Lambda reads the key from Secrets Manager when it runs.
-
-| API            | Used by                                                     | Lambda environment variable |
-| -------------- | ----------------------------------------------------------- | --------------------------- |
-| SerpApi        | `extract_airplane_ticket_rates`, `extract_hotel_room_rates` | `API_KEY_SECRET`            |
-| Exchange Rates | `extract_exchange_rates`                                    | `ACCESS_KEY_SECRET`         |
-| Geoapify       | `extract_destination_activities`                            | `API_KEY_SECRET`            |
-
-### AWS ARN keys
-
-The extraction, transformation and load Lambda functions use environment variables to reference the ARNs of the AWS S3 buckets and the Aurora cluster they read from and write to. These values are kept in a local .env file and set on each Lambda function's configuration in AWS, so account-specific resource identifiers aren't exposed.
-
-| ENV Type           | Used by                                                                                              | Environment variable                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_EXCHANGE_RATES_ARN`                                    |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN`                             |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_HOTEL_ROOM_RATES_ARN`                                  |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN`                            |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_EXCHANGE_RATES_ARN`                                  |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN`                           |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN`                                |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN`                          |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_ARN`     |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_LOAD_COMBINED_DATASET_AURORA_ARN`                              |
-| S3 BUCKET ARN      | `extract_exchange_rates`,<br>`transform_exchange_rates`                                              | `AWS_EXCHANGE_RATES_RAW_DATA_S3_BUCKET`                             |
-| S3 BUCKET ARN      | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates` | `AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET`                            |
-| S3 BUCKET ARN      | `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`     | `AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET`                           |
-| S3 BUCKET ARN      | `extract_destination_activities`,<br>`transform_destination_activities`                              | `AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET`                     |
-| S3 BUCKET ARN      | `transform_exchange_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`               | `AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET`                     |
-| S3 BUCKET ARN      | `transform_airplane_ticket_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`        | `AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET`                    |
-| S3 BUCKET ARN      | `transform_hotel_room_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`             | `AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET`                   |
-| S3 BUCKET ARN      | `transform_destination_activities`,<br>`transform_combine_airplane_hotel_destination_datasets`       | `AWS_DESTINATION_ACTIVIES_TRANSFORMED_DATA_S3_BUCKET`               |
-| S3 BUCKET ARN      | `transform_combine_airplane_hotel_destination_datasets`,<br>`load_gold_layer`                        | `AWS_COMBINE_AIRPLANE_HOTEL_DESTINATION_TRANSFORMED_DATA_S3_BUCKET` |
-| AURORA CLUSTER ARN | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates` REVIEW                                | `AWS_GOLD_LAYER_AURORA_SERVERLESS_CLUSTER`                          |
 
 ## Usage
 
