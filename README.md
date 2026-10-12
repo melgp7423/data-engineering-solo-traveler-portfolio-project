@@ -7,6 +7,7 @@
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
 - [Data Sources](#data-sources)
+- [Getting Started](#getting-started)
 - [Setup](#setup)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Usage](#usage)
@@ -46,7 +47,7 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 
 ## Architecture
 
-The pipeline follows the **medallion architecture**: data moves through 3 layers, each one cleaner and more query-ready than the last.
+The pipeline follows the medallion architecture: data moves through 3 layers, each one cleaner and more query-ready than the last.
 
 | Layer      | What it holds                                                                                          | Format  |
 | ---------- | ------------------------------------------------------------------------------------------------------ | ------- |
@@ -131,8 +132,8 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 4. **Extract → Bronze.** The extract Lambdas call each API and write the raw JSON responses to the bronze S3 buckets.
    - Exchange rates run on their own.
    - Airplane ticket rates, hotel room rates and destination activities run in a chain: the hotels Lambda searches the destinations from the flight deals, and the activities Lambda searches the destinations from the hotels.
-5. **Catalog.** Once extraction finishes, a **Glue Crawler** crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the **Glue Data Catalog**, so the raw data can be discovered and queried before it is transformed.
-6. **Transform → Silver.** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans them (for example, filling missing values and standardizing types), and writes the result as **Parquet** to that source's silver bucket.
+5. **Catalog.** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog, so the raw data can be discovered and queried before it is transformed.
+6. **Transform → Silver.** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans them (for example, filling missing values and standardizing types), and writes the result as Parquet to that source's silver bucket.
    - Exchange rates
    - Airplane ticket rates
    - Hotel room rates
@@ -140,7 +141,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
    A final transform Lambda joins the four silver datasets (converting prices with the exchange rates) into one combined **Parquet** dataset.
 
-7. **Load → Gold.** A load Lambda reads the combined **Parquet** dataset from the S3 combined bucket and writes it into the gold layer, an **Amazon Aurora Serverless** cluster. This gives downstream analytics one curated, query-ready table of flight, hotel, destination activities and currency-converted price data for each travel location. Aurora Serverless scales capacity up and down with the daily load.
+7. **Load → Gold.** A load Lambda reads the combined Parquet dataset from the S3 combined bucket and writes it into the gold layer, an Amazon Aurora Serverless cluster. This gives downstream analytics one curated, query-ready table of flight, hotel, destination activities and currency-converted price data for each travel location. Aurora Serverless scales capacity up and down with the daily load.
 8. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
 9. **Amazon Quick Sight** visualizes the results.
 
@@ -182,10 +183,57 @@ Each Lambda folder contains:
 
 | Data                    | Source                                                                                  |
 | ----------------------- | --------------------------------------------------------------------------------------- |
-| Currency exchange rates | [Exchange Rates API](https://exchangeratesapi.io/)                                      |
+| Currency exchange rates | [Free Currency API](https://freecurrencyapi.com/docs/)                                  |
 | Flight costs            | [SerpApi – Google Flights API](https://serpapi.com/google-flights-api)                  |
 | Hotel room costs        | [SerpApi – Google Hotels API](https://serpapi.com/google-hotels-api)                    |
 | Destination activities  | [Geoapify – Travel & Tourism APIs](https://www.geoapify.com/industries/travel-tourism/) |
+
+## Getting Started
+
+### Prerequisites
+
+To run the code and tests on your computer:
+
+- [Git](https://git-scm.com/downloads)
+- [Python 3.14](https://www.python.org/downloads/) (the same version the CI/CD pipeline uses) and `pip`
+
+To deploy and run the pipeline in AWS, you also need:
+
+- An AWS account with permission to create Lambda, S3, Step Functions, EventBridge, API Gateway, Glue, Athena, Aurora Serverless, Secrets Manager and IAM resources.
+- API keys listed in [setup](#setup).
+- A GitHub fork of this repository, so GitHub Actions can deploy the Lambdas.
+
+### Local setup
+
+1. **Clone the repository.**
+
+   ```bash
+   git clone git@github.com:melgp7423/data-engineering-solo-traveler-portfolio-project.git
+   cd data-engineering-solo-traveler-portfolio-project
+   ```
+
+2. **Create and activate a virtual environment.**
+
+   ```bash
+   python3.14 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+3. **Install the dependencies.** Each Lambda has its own `requirements.txt`. Install `pytest` plus the requirements of every Lambda:
+
+   ```bash
+   pip install pytest
+   for req in src/*/*/requirements.txt; do pip install -r "$req"; done
+   ```
+
+4. **Run the tests.** The tests import the Lambdas from `src/`, so set `PYTHONPATH`:
+
+   ```bash
+   PYTHONPATH=src pytest tests
+   PYTHONPATH=src pytest tests/extract/test_extract_exchange_rates.py
+   ```
+
+5. **Create a `.env` file** in the project root.
 
 ## Setup
 
@@ -197,7 +245,7 @@ Each Lambda folder contains:
 
 ### API keys
 
-The extraction Lambdas need three API keys. The keys are stored in **AWS Secrets Manager**. Each Lambda has an environment variable that holds the name of its secret and the Lambda reads the key from Secrets Manager when it runs.
+The extraction Lambdas need three API keys. The keys are stored in AWS Secrets Manager. Each Lambda has an environment variable that holds the name of its secret and the Lambda reads the key from Secrets Manager when it runs.
 
 | API            | Used by                                                     | Lambda environment variable |
 | -------------- | ----------------------------------------------------------- | --------------------------- |
@@ -234,7 +282,7 @@ The extraction, transformation and load Lambda functions use environment variabl
 
 ## CI/CD Pipeline
 
-Every Lambda function is tested and deployed automatically with **GitHub Actions**. The workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
+Every Lambda function is tested and deployed automatically with GitHub Actions. The workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
 
 ### When it runs
 
@@ -242,7 +290,7 @@ Every Lambda function is tested and deployed automatically with **GitHub Actions
 | -------------------------------- | --------------------------------------- |
 | Pull request to `main`           | Tests the changed Lambdas (no deploy)   |
 | Push or merge to `main`          | Tests, then deploys the changed Lambdas |
-| Manual run (`workflow_dispatch`) | Tests and deploys **every** Lambda      |
+| Manual run (`workflow_dispatch`) | Tests and deploys every Lambda          |
 
 ### How it works
 
