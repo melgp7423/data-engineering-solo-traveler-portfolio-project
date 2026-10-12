@@ -27,7 +27,7 @@ Environment variables (placeholders shown):
     ADULTS                                          = 1
     CURRENCY                                        = USD
     AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET          = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                                      = airplane_ticket_rates/
+    RAW_PREFIX                                      = <RAW_PREFIX>
     REQUEST_TIMEOUT                                 = 60
 """
 
@@ -73,7 +73,7 @@ class ExtractConfig:
             aws_airplane_ticket_raw_data_s3_bucket=os.environ.get(
                 "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", ""
             ).strip(),
-            raw_prefix=os.environ.get("RAW_PREFIX", "airplane_ticket_rates/"),
+            raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
             departure_id=os.environ.get("DEPARTURE_ID", "PHX").strip().upper(),
             outbound_offset_days=int(os.environ.get("OUTBOUND_OFFSET_DAYS", "7")),
             trip_length_days=int(os.environ.get("TRIP_LENGTH_DAYS", "7")),
