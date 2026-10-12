@@ -26,7 +26,7 @@ Environment variables (placeholders shown):
     TRIP_LENGTH_DAYS                                = 14    return_date = outbound_date + this many days
     ADULTS                                          = 1
     CURRENCY                                        = USD
-    AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET          = <YOUR_RAW_BUCKET_NAME>
+    AWS_AIRPLANE_TICKET_RATES_S3_BUCKET             = <YOUR_RAW_BUCKET_NAME>
     RAW_PREFIX                                      = <RAW_PREFIX>
     REQUEST_TIMEOUT                                 = 60
 """
@@ -54,7 +54,7 @@ class ExtractConfig:
 
     api_url: str
     api_key_secret: str
-    aws_airplane_ticket_raw_data_s3_bucket: str
+    aws_airplane_ticket_rates_s3_bucket: str
     raw_prefix: str
     departure_id: str = "PHX"
     outbound_offset_days: int = 7
@@ -70,8 +70,8 @@ class ExtractConfig:
             api_key_secret=os.environ.get(
                 "API_KEY_SECRET", "prod/travelProject/serpApi"
             ),
-            aws_airplane_ticket_raw_data_s3_bucket=os.environ.get(
-                "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", ""
+            aws_airplane_ticket_rates_s3_bucket=os.environ.get(
+                "AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", ""
             ).strip(),
             raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
             departure_id=os.environ.get("DEPARTURE_ID", "PHX").strip().upper(),
@@ -88,7 +88,7 @@ class ExtractConfig:
         required = {
             "API_URL": self.api_url,
             "API_KEY_SECRET": self.api_key_secret,
-            "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET": self.aws_airplane_ticket_raw_data_s3_bucket,
+            "AWS_AIRPLANE_TICKET_RATES_S3_BUCKET": self.aws_airplane_ticket_rates_s3_bucket,
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
@@ -355,7 +355,7 @@ def build_service(config: ExtractConfig) -> ExtractService:
         ),
         validator=ResponseValidator(),
         key_builder=RawObjectKeyBuilder(config.raw_prefix),
-        writer=S3RawWriter(config.aws_airplane_ticket_raw_data_s3_bucket),
+        writer=S3RawWriter(config.aws_airplane_ticket_rates_s3_bucket),
     )
 
 
