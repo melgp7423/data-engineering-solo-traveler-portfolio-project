@@ -1,6 +1,16 @@
 # Solo Traveler Data Engineering Project
 
-## Project Summary
+## Table of contents
+
+- [Overview](#overview)
+- [Tech Stack](#tech-stack)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
+- [Data Sources](#data-sources)
+- [CI/CD Pipeline](#ci/cd-pipeline)
+- [Usage](#usage)
+
+## Overview
 
 An AWS data pipeline that finds the cheapest last-minute vacations for a solo traveler flying out of Phoenix. It pulls travel data from four sources (flights, hotels, destination activities and exchange rates), stores the raw data, transforms it and makes it queryable for dashboards.
 
@@ -20,14 +30,18 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 - The activities available at each destination and its vacation type.
 - The exchange rate, for international destinations.
 
-## Data Sources
+## Tech Stack
 
-| Data                    | Source                                                                                  |
-| ----------------------- | --------------------------------------------------------------------------------------- |
-| Currency exchange rates | [Exchange Rates API](https://exchangeratesapi.io/)                                      |
-| Flight costs            | [SerpApi – Google Flights API](https://serpapi.com/google-flights-api)                  |
-| Hotel room costs        | [SerpApi – Google Hotels API](https://serpapi.com/google-hotels-api)                    |
-| Destination activities  | [Geoapify – Travel & Tourism APIs](https://www.geoapify.com/industries/travel-tourism/) |
+- Amazon EventBridge
+- AWS Lambda (Python, with `pyarrow` for Parquet)
+- AWS Step Functions
+- Amazon API Gateway
+- Amazon S3 (bronze and silver layer)
+- Amazon Aurora Serverless (gold layer)
+- AWS Glue Data Catalog
+- Amazon Athena
+- Amazon Quick Suite
+- GitHub Actions (CI/CD)
 
 ## Architecture
 
@@ -72,7 +86,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
                                      ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
  │ GLUE DATA CATALOG   raw database, one table per bronze source                │
- │   schemas + extract_date partitions registered                                │
+ │   schemas + extract_date partitions registered                               │
  └──────────────────────────────────────────────────────────────────────────────┘
                                      │
           ┌────────────────┬─────────┴───────────┬──────────────────────┐
@@ -127,7 +141,50 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
 7. **Load → Gold.** A load Lambda reads the combined **Parquet** dataset from the S3 combined bucket and writes it into the gold layer, an **Amazon Aurora Serverless** cluster. This gives downstream analytics one curated, query-ready table of flight, hotel, destination activities and currency-converted price data for each travel location. Aurora Serverless scales capacity up and down with the daily load.
 8. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
-9. **Amazon Quick Suite** visualizes the results.
+9. **Amazon Quick Sight** visualizes the results.
+
+## Project Structure
+
+```
+├── .github/
+│   └── workflows/
+│       └── deploy.yaml                                      # CI/CD
+├── src/
+│   ├── extract/                                             # API → bronze (raw JSON)
+│   │   ├── extract_exchange_rates/
+│   │   ├── extract_airplane_ticket_rates/
+│   │   ├── extract_hotel_room_rates/
+│   │   └── extract_destination_activities/
+│   ├── transformation/                                      # bronze → silver (Parquet)
+│   │   ├── transform_exchange_rates/                        # (planned)
+│   │   ├── transform_airplane_ticket_rates/
+│   │   ├── transform_hotel_room_rates/
+│   │   ├── transform_destination_activities/
+│   │   └── transform_combine_airplane_hotel_destination_datasets/
+│   └── load/
+│       └── load_combined_dataset_aurora                     # silver → gold (Parquet)
+├── tests/
+│   ├── extract/                                             # one test file per extract Lambda
+│   ├── transformation/                                      # one test file per transform Lambda
+│   └── load/                                                # one test file per load Lambda
+├── .gitignore
+└── README.md
+```
+
+Each Lambda folder contains:
+
+- `handler.py`: the Lambda code (entry point `lambda_handler`)
+- `requirements.txt`: its Python dependencies
+- `__init__.py`
+
+## Data Sources
+
+| Data                    | Source                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| Currency exchange rates | [Exchange Rates API](https://exchangeratesapi.io/)                                      |
+| Flight costs            | [SerpApi – Google Flights API](https://serpapi.com/google-flights-api)                  |
+| Hotel room costs        | [SerpApi – Google Hotels API](https://serpapi.com/google-hotels-api)                    |
+| Destination activities  | [Geoapify – Travel & Tourism APIs](https://www.geoapify.com/industries/travel-tourism/) |
 
 ## CI/CD Pipeline
 
@@ -183,53 +240,6 @@ Jobs use `fail-fast: false`, so one Lambda failing its tests or deploy doesn't c
 2. Add its test file at `tests/<stage>/test_<lambda_name>.py`.
 3. Add a repository secret with the function's ARN, for example `AWS_TRANSFORM_EXCHANGE_RATES_ARN`.
 4. In `deploy.yaml`, add the Lambda to `FUNCTION_NAMES`, to the `paths-filter` filters and to the manual-run list in the `detect-changes` job.
-
-## Tech Stack
-
-- Amazon EventBridge
-- AWS Lambda (Python, with `pyarrow` for Parquet)
-- AWS Step Functions
-- Amazon API Gateway
-- Amazon S3 (bronze and silver layer)
-- Amazon Aurora Serverless (gold layer)
-- AWS Glue Data Catalog
-- Amazon Athena
-- Amazon Quick Suite
-- GitHub Actions (CI/CD)
-
-## Project Structure
-
-```
-├── .github/
-│   └── workflows/
-│       └── deploy.yaml                                      # CI/CD
-├── src/
-│   ├── extract/                                             # API → bronze (raw JSON)
-│   │   ├── extract_exchange_rates/
-│   │   ├── extract_airplane_ticket_rates/
-│   │   ├── extract_hotel_room_rates/
-│   │   └── extract_destination_activities/
-│   ├── transformation/                                      # bronze → silver (Parquet)
-│   │   ├── transform_exchange_rates/                        # (planned)
-│   │   ├── transform_airplane_ticket_rates/
-│   │   ├── transform_hotel_room_rates/
-│   │   ├── transform_destination_activities/
-│   │   └── transform_combine_airplane_hotel_destination_datasets/
-│   └── load/
-│       └── load_combined_dataset_aurora                     # silver → gold (Parquet)
-├── tests/
-│   ├── extract/                                             # one test file per extract Lambda
-│   ├── transformation/                                      # one test file per transform Lambda
-│   └── load/                                                # one test file per load Lambda
-├── .gitignore
-└── README.md
-```
-
-Each Lambda folder contains:
-
-- `handler.py`: the Lambda code (entry point `lambda_handler`)
-- `requirements.txt`: its Python dependencies
-- `__init__.py`
 
 ## Setup
 
