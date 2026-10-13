@@ -411,29 +411,82 @@ def test_service_raises_when_no_feature_is_complete():
     assert s3.puts == []
 
 
+def test_service_reads_and_writes_same_bucket_separated_by_prefix():
+    raw_key = "raw/destination_activities/" + PAGE_0
+    s3 = FakeS3(
+        objects={("travel-bucket", raw_key): raw(make_payload([make_feature()]))}
+    )
+    service = TransformService(
+        locator=RawObjectLocator(
+            "travel-bucket", "raw/destination_activities/", client=s3
+        ),
+        reader=S3RawReader(client=s3),
+        transformer=ActivitiesTransformer(),
+        grouper=CountyGrouper(),
+        key_builder=TransformedKeyBuilder(
+            "raw/destination_activities/", "transformed/destination_activities/"
+        ),
+        writer=S3ParquetWriter("travel-bucket", client=s3),
+    )
+
+    result = service.run({"places_keys": [raw_key]})
+
+    assert result["source_bucket"] == result["bucket"] == "travel-bucket"
+    assert [(p["Bucket"], p["Key"]) for p in s3.puts] == [
+        (
+            "travel-bucket",
+            "transformed/destination_activities/extract_date=2026-10-09/"
+            "activities-wayne_county-michigan.parquet",
+        )
+    ]
+
+
 # TransformConfig
-def test_config_accepts_bucket_arns(monkeypatch):
+def test_config_requires_bucket(monkeypatch):
+    monkeypatch.delenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", raising=False)
+
+    with pytest.raises(ValueError, match="AWS_DESTINATION_ACTIVITIES_S3_BUCKET"):
+        TransformConfig.from_env()
+
+
+def test_config_rejects_placeholder_bucket():
+    with pytest.raises(ValueError, match="AWS_DESTINATION_ACTIVITIES_S3_BUCKET"):
+        TransformConfig(
+            aws_destination_activities_s3_bucket="<YOUR_RAW_BUCKET_NAME>"
+        ).validate()
+
+
+def test_config_ignores_old_raw_and_transformed_bucket_variables(monkeypatch):
+    monkeypatch.delenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", raising=False)
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", "raw")
     monkeypatch.setenv(
-        "AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", "arn:aws:s3:::raw-bucket"
+        "AWS_DESTINATION_ACTIVITIES_TRANSFORMED_DATA_S3_BUCKET", "transformed"
     )
+
+    with pytest.raises(ValueError, match="AWS_DESTINATION_ACTIVITIES_S3_BUCKET"):
+        TransformConfig.from_env()
+
+
+def test_config_reads_bucket_arn_and_prefixes(monkeypatch):
     monkeypatch.setenv(
-        "AWS_DESTINATION_ACTIVITIES_TRANSFORMED_DATA_S3_BUCKET", "transformed-bucket"
+        "AWS_DESTINATION_ACTIVITIES_S3_BUCKET", " arn:aws:s3:::travel-bucket "
     )
+    monkeypatch.setenv("RAW_PREFIX", " raw/destination_activities/ ")
+    monkeypatch.setenv("TRANSFORMED_PREFIX", " transformed/destination_activities/ ")
 
     config = TransformConfig.from_env()
 
-    assert config.aws_destination_activities_raw_data_s3_bucket == "raw-bucket"
-    assert (
-        config.aws_destination_activities_transformed_data_s3_bucket
-        == "transformed-bucket"
-    )
+    assert config.aws_destination_activities_s3_bucket == "travel-bucket"
+    assert config.raw_prefix == "raw/destination_activities/"
+    assert config.transformed_prefix == "transformed/destination_activities/"
 
 
-def test_config_requires_both_buckets(monkeypatch):
-    monkeypatch.delenv("AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", raising=False)
-    monkeypatch.setenv(
-        "AWS_DESTINATION_ACTIVITIES_TRANSFORMED_DATA_S3_BUCKET", "transformed-bucket"
-    )
+def test_config_prefixes_default_to_empty(monkeypatch):
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "travel-bucket")
+    monkeypatch.delenv("RAW_PREFIX", raising=False)
+    monkeypatch.delenv("TRANSFORMED_PREFIX", raising=False)
 
-    with pytest.raises(ValueError):
-        TransformConfig.from_env()
+    config = TransformConfig.from_env()
+
+    assert config.raw_prefix == ""
+    assert config.transformed_prefix == ""
