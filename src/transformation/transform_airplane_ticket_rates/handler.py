@@ -14,7 +14,6 @@ Classes and their one job:
 
 Environment variables (placeholders shown):
     AWS_AIRPLANE_TICKET_RATES_S3_BUCKET             = <YOUR_RAW_BUCKET_NAME>
-    AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET  = <YOUR_TRANSFORMED_BUCKET_NAME>
     RAW_PREFIX                                      = <RAW_PREFIX>
     TRANSFORMED_PREFIX                              = <TRANSFORMED_PREFIX>
 
