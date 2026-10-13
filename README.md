@@ -65,7 +65,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
                                      │
                               Step Functions
                                      │
- ── **EXTRACT** ─────────────────────┼─────────────────────────────────────────────
+ ── EXTRACT ─────────────────────────┼─────────────────────────────────────────────
                                      │
           ┌──────────────────────────┴───────────────┐
           │                                          │
@@ -77,7 +77,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
           │                                          │
           ▼                                          ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │ **BRONZE**   S3 raw buckets (JSON)                                           │
+ │   BRONZE     S3 raw buckets (JSON)                                           │
  │   exchange_rates/   airplane_ticket_rates/   hotel_room_rates/               │
  │   destination_activities/                                                    │
  └──────────────────────────────────────────────────────────────────────────────┘
@@ -85,26 +85,26 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
                                       │
           ┌────────────────┬──────────┴──────────┬──────────────────────┐
           │                │                     │                      │
- ── **TRANSFORM** ─────────┼─────────────────────┼──────────────────────┼─────────
+ ── TRANSFORM ─────────────┼─────────────────────┼──────────────────────┼─────────
           │                │                     │                      │
  Lambda: transform  Lambda: transform     Lambda: transform     Lambda: transform
  exchange rates     airplane ticket rates hotel room rates      destination activities
           │                │                     │                      │
           ▼                ▼                     ▼                      ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │ **SILVER**   S3 transformed buckets (Parquet), one per source                │
+ │ SILVER       S3 transformed buckets (Parquet), one per source                │
  │   exchange_rates/   airplane_ticket_rates/   hotel_room_rates/               │
  │   destination_activities/                                                    │
  │        │                │                     │                      │       │
  │        └────────────────┴─────────┬───────────┴──────────────────────┘       │
  │                                   │                                          │
- │─ **CATALOG** ─────────────────────┼──────────────────────────────────────────│
+ │─── CATALOG ───────────────────────┼──────────────────────────────────────────│
  │                                   │                                          │
  │             Glue Crawler: crawl the silver transformed buckets               │
  │                                   │                                          │
  │                                   ▼                                          │
  │──────────────────────────────────────────────────────────────────────────────│
- │ **GLUE DATA CATALOG**     one table per silver source                        │
+ │ GLUE DATA CATALOG     one table per silver source                            │
  │                schemas + extract_date partitions registered                  │
  │──────────────────────────────────────────────────────────────────────────────│
  │                                   │                                          │
@@ -120,10 +120,10 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
                                      │
                                      ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │ **GOLD**     Amazon Aurora Serverless combined cluster (Parquet)             │
+ │   GOLD.      Amazon Aurora Serverless combined cluster (Parquet)             │
  └──────────────────────────────────────────────────────────────────────────────┘
                                      │
- ── **ANALYTICS** ───────────────────┼─────────────────────────────────────────────
+ ── ANALYTICS ───────────────────────┼─────────────────────────────────────────────
                                      │
                      Athena (via the Glue Data Catalog)
                                      │
@@ -261,28 +261,33 @@ The extraction Lambdas need three API keys. The keys are stored in AWS Secrets M
 
 The extraction, transformation and load Lambda functions use environment variables to reference the ARNs of the AWS S3 buckets and the Aurora cluster they read from and write to. These values are kept in a local .env file and set on each Lambda function's configuration in AWS, so account-specific resource identifiers aren't exposed.
 
-| ENV Type           | Used by                                                                                              | Environment variable                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_EXCHANGE_RATES_ARN`                                    |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN`                             |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_HOTEL_ROOM_RATES_ARN`                                  |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN`                            |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_EXCHANGE_RATES_ARN`                                  |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN`                           |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN`                                |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN`                          |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_ARN`     |
-| Lambda ARN         | `deploy.yaml`                                                                                        | `AWS_LOAD_COMBINED_DATASET_AURORA_ARN`                              |
-| S3 BUCKET ARN      | `extract_exchange_rates`,<br>`transform_exchange_rates`                                              | `AWS_EXCHANGE_RATES_RAW_DATA_S3_BUCKET`                             |
-| S3 BUCKET ARN      | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates` | `AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET`                            |
-| S3 BUCKET ARN      | `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`     | `AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET`                           |
-| S3 BUCKET ARN      | `extract_destination_activities`,<br>`transform_destination_activities`                              | `AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET`                     |
-| S3 BUCKET ARN      | `transform_exchange_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`               | `AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET`                     |
-| S3 BUCKET ARN      | `transform_airplane_ticket_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`        | `AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET`                    |
-| S3 BUCKET ARN      | `transform_hotel_room_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`             | `AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET`                   |
-| S3 BUCKET ARN      | `transform_destination_activities`,<br>`transform_combine_airplane_hotel_destination_datasets`       | `AWS_DESTINATION_ACTIVIES_TRANSFORMED_DATA_S3_BUCKET`               |
-| S3 BUCKET ARN      | `transform_combine_airplane_hotel_destination_datasets`,<br>`load_gold_layer`                        | `AWS_COMBINE_AIRPLANE_HOTEL_DESTINATION_TRANSFORMED_DATA_S3_BUCKET` |
-| AURORA CLUSTER ARN | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates` REVIEW                                | `AWS_GOLD_LAYER_AURORA_SERVERLESS_CLUSTER`                          |
+| ENV Type           | Used by                                                                                                                                                          | Environment variable                                                |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_EXTRACT_EXCHANGE_RATES_ARN`                                    |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN`                             |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_EXTRACT_HOTEL_ROOM_RATES_ARN`                                  |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN`                            |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_TRANSFORM_EXCHANGE_RATES_ARN`                                  |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN`                           |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN`                                |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN`                          |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_ARN`     |
+| Lambda ARN         | `deploy.yaml`                                                                                                                                                    | `AWS_LOAD_COMBINED_DATASET_AURORA_ARN`                              |
+| S3 BUCKET ARN      | `extract_exchange_rates`,<br>`transform_exchange_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`                                              | `AWS_EXCHANGE_RATES_S3_BUCKET`                                      |
+| S3 BUCKET ARN      | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates`,<br>`transform_combine_airplane_hotel_destination_datasets` | `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET`                               |
+| S3 BUCKET ARN      | `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`     | `AWS_HOTEL_ROOM_RATES_S3_BUCKET`                                    |
+| S3 BUCKET ARN      | `extract_destination_activities`,<br>`transform_destination_activities`,<br>`transform_combine_airplane_hotel_destination_datasets`                              | `AWS_DESTINATION_ACTIVITIES_S3_BUCKET`                              |
+| S3 BUCKET ARN      | `transform_combine_airplane_hotel_destination_datasets`,<br>`load_gold_layer`                                                                                    | `AWS_COMBINE_AIRPLANE_HOTEL_DESTINATION_TRANSFORMED_DATA_S3_BUCKET` |
+| AURORA CLUSTER ARN | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates` REVIEW                                                                                            | `AWS_GOLD_LAYER_AURORA_SERVERLESS_CLUSTER`                          |
+
+Each source keeps its raw (bronze) and transformed (silver) data in the same bucket, separated by folder prefixes set on each Lambda:
+
+| Environment variable  | Used by                                    | Purpose                                                                               |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `RAW_PREFIX`          | every `extract_*` and `transform_*` Lambda | Folder above `extract_date=` for that source's raw JSON (`""` = bucket root)          |
+| `TRANSFORMED_PREFIX`  | every `transform_*` Lambda                 | Folder above `extract_date=` for that source's Parquet output                         |
+| `FLIGHT_DEALS_PREFIX` | `extract_hotel_room_rates`                 | Raw prefix of the airplane ticket rates data in `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET` |
+| `HOTEL_PREFIX`        | `extract_destination_activities`           | Raw prefix of the hotel room rates data in `AWS_HOTEL_ROOM_RATES_S3_BUCKET`           |
 
 ## CI/CD Pipeline
 
