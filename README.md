@@ -36,6 +36,7 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 
 - Amazon EventBridge
 - AWS Lambda (Python, with `pyarrow` for Parquet)
+- AWS Glue
 - AWS Step Functions
 - Amazon API Gateway
 - Amazon S3 (bronze and silver layer)
@@ -64,7 +65,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
                                      │
                               Step Functions
                                      │
- ── EXTRACT ─────────────────────────┼─────────────────────────────────────────────
+ ── **EXTRACT** ─────────────────────┼─────────────────────────────────────────────
                                      │
           ┌──────────────────────────┴───────────────┐
           │                                          │
@@ -76,37 +77,40 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
           │                                          │
           ▼                                          ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │ BRONZE   S3 raw buckets (JSON)                                               │
+ │ **BRONZE**   S3 raw buckets (JSON)                                           │
  │   exchange_rates/   airplane_ticket_rates/   hotel_room_rates/               │
  │   destination_activities/                                                    │
  └──────────────────────────────────────────────────────────────────────────────┘
-                                     │
- ── CATALOG ─────────────────────────┼─────────────────────────────────────────────
-                                     │
-                  Glue Crawler: crawl the bronze raw buckets
-                                     │
-                                     ▼
- ┌──────────────────────────────────────────────────────────────────────────────┐
- │ GLUE DATA CATALOG   raw database, one table per bronze source                │
- │   schemas + extract_date partitions registered                               │
- └──────────────────────────────────────────────────────────────────────────────┘
-                                     │
-          ┌────────────────┬─────────┴───────────┬──────────────────────┐
+                                      │
+                                      │
+          ┌────────────────┬──────────┴──────────┬──────────────────────┐
           │                │                     │                      │
- ── TRANSFORM ─────────────┼─────────────────────┼──────────────────────┼─────────
+ ── **TRANSFORM** ─────────┼─────────────────────┼──────────────────────┼─────────
           │                │                     │                      │
  Lambda: transform  Lambda: transform     Lambda: transform     Lambda: transform
  exchange rates     airplane ticket rates hotel room rates      destination activities
           │                │                     │                      │
           ▼                ▼                     ▼                      ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │ SILVER   S3 transformed buckets (Parquet), one per source                    │
+ │ **SILVER**   S3 transformed buckets (Parquet), one per source                │
  │   exchange_rates/   airplane_ticket_rates/   hotel_room_rates/               │
  │   destination_activities/                                                    │
  │        │                │                     │                      │       │
  │        └────────────────┴─────────┬───────────┴──────────────────────┘       │
  │                                   │                                          │
- │             Lambda: transform combine (all four datasets)                    │
+ │─ **CATALOG** ─────────────────────┼──────────────────────────────────────────│
+ │                                   │                                          │
+ │             Glue Crawler: crawl the silver transformed buckets               │
+ │                                   │                                          │
+ │                                   ▼                                          │
+ │──────────────────────────────────────────────────────────────────────────────│
+ │ **GLUE DATA CATALOG**     one table per silver source                        │
+ │                schemas + extract_date partitions registered                  │
+ │──────────────────────────────────────────────────────────────────────────────│
+ │                                   │                                          │
+ │                                   │                                          │
+ │                                   │                                          │
+ │             Glue: transform combine (all four datasets)                      │
  │                                   │                                          │
  │                                   ▼                                          │
  │                     S3 combined bucket (Parquet)                             │
@@ -116,10 +120,10 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
                                      │
                                      ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │ GOLD     Amazon Aurora Serverless combined cluster (Parquet)                 │
+ │ **GOLD**     Amazon Aurora Serverless combined cluster (Parquet)             │
  └──────────────────────────────────────────────────────────────────────────────┘
                                      │
- ── ANALYTICS ───────────────────────┼─────────────────────────────────────────────
+ ── **ANALYTICS** ───────────────────┼─────────────────────────────────────────────
                                      │
                      Athena (via the Glue Data Catalog)
                                      │
@@ -139,7 +143,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
    - Hotel room rates
    - Destination activities: also categorizes each destination by vacation type (adventure, beach, restaurant, etc.) based on the places and activities found there.
 
-   A final transform Lambda joins the four silver datasets (converting prices with the exchange rates) into one combined **Parquet** dataset.
+   A final transform AWS Glue Script joins the four silver datasets (converting prices with the exchange rates) into one combined Parquet dataset.
 
 7. **Load → Gold.** A load Lambda reads the combined Parquet dataset from the S3 combined bucket and writes it into the gold layer, an Amazon Aurora Serverless cluster. This gives downstream analytics one curated, query-ready table of flight, hotel, destination activities and currency-converted price data for each travel location. Aurora Serverless scales capacity up and down with the daily load.
 8. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
