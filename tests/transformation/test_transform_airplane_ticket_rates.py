@@ -25,7 +25,15 @@ from transformation.transform_airplane_ticket_rates.handler import (
     TransformService,
 )
 
-RAW_KEY = "airplane_ticket_rates/ingest_date=2026-10-07/deals_PHX_2026-10-14_2026-10-28_004706_ab12cd34.json"
+# Raw JSON and transformed Parquet live in one bucket, split by prefix
+BUCKET = "travel-app-bucket"
+RAW_PREFIX = "raw/"
+TRANSFORMED_PREFIX = "transformed/"
+
+RAW_KEY = (
+    "raw/extract_date=2026-10-07/deals_PHX_2026-10-14_2026-10-28_004706_ab12cd34.json"
+)
+TRANSFORMED_KEY = "transformed/extract_date=2026-10-07/deals_PHX_2026-10-14_2026-10-28_004706_ab12cd34.parquet"
 
 SEARCH_METADATA = {
     "id": "6ac5968a919dfa73ed4e0e7c",
@@ -70,9 +78,7 @@ def make_payload(deals=None):
     }
 
 
-# ---------------------------------------------------------------------------
 # Fakes
-# ---------------------------------------------------------------------------
 class FakeS3:
     def __init__(self, objects=None):
         self.objects = dict(objects or {})
@@ -87,17 +93,15 @@ class FakeS3:
 
 def build_service(s3):
     return TransformService(
-        locator=RawObjectLocator("raw-bucket"),
+        locator=RawObjectLocator(BUCKET, RAW_PREFIX),
         reader=S3RawReader(client=s3),
         transformer=DealsTransformer(),
-        key_builder=TransformedKeyBuilder("airplane_ticket_rates/", "airplane_ticket_rates/"),
-        writer=S3ParquetWriter("transformed-bucket", client=s3),
+        key_builder=TransformedKeyBuilder(RAW_PREFIX, TRANSFORMED_PREFIX),
+        writer=S3ParquetWriter(BUCKET, client=s3),
     )
 
 
-# ---------------------------------------------------------------------------
 # DealsTransformer
-# ---------------------------------------------------------------------------
 def test_keeps_all_metadata_and_only_requested_deal_fields():
     table = DealsTransformer().transform(make_payload())
 
@@ -121,7 +125,9 @@ def test_keeps_all_metadata_and_only_requested_deal_fields():
     ]
     row = table.to_pylist()[0]
     assert row["search_metadata_id"] == "6ac5968a919dfa73ed4e0e7c"
-    assert row["search_metadata_created_at"] == datetime(2026, 10, 7, 0, 47, 6, tzinfo=timezone.utc)
+    assert row["search_metadata_created_at"] == datetime(
+        2026, 10, 7, 0, 47, 6, tzinfo=timezone.utc
+    )
     assert row["search_metadata_total_time_taken"] == 0.98
     assert row["name"] == "Richmond"
     assert row["price"] == 281
@@ -131,11 +137,18 @@ def test_keeps_all_metadata_and_only_requested_deal_fields():
 
 
 def test_metadata_repeated_on_every_deal_row():
-    deals = [make_deal(name="Richmond"), make_deal(name="Madison"), make_deal(name="Provo")]
+    deals = [
+        make_deal(name="Richmond"),
+        make_deal(name="Madison"),
+        make_deal(name="Provo"),
+    ]
     table = DealsTransformer().transform(make_payload(deals))
 
     assert table.num_rows == 3
-    assert table.column("search_metadata_id").to_pylist() == ["6ac5968a919dfa73ed4e0e7c"] * 3
+    assert (
+        table.column("search_metadata_id").to_pylist()
+        == ["6ac5968a919dfa73ed4e0e7c"] * 3
+    )
     assert table.column("name").to_pylist() == ["Richmond", "Madison", "Provo"]
 
 
@@ -154,7 +167,9 @@ def test_description_whitespace_is_trimmed():
     deal = make_deal(description="Utah city known for Brigham Young University.\n")
     table = DealsTransformer().transform(make_payload([deal]))
 
-    assert table.column("description").to_pylist() == ["Utah city known for Brigham Young University."]
+    assert table.column("description").to_pylist() == [
+        "Utah city known for Brigham Young University."
+    ]
 
 
 def test_unexpected_metadata_field_is_kept_as_string():
@@ -188,23 +203,27 @@ def test_invalid_payload_raises(payload):
         DealsTransformer().transform(payload)
 
 
-# ---------------------------------------------------------------------------
 # RawObjectLocator / TransformedKeyBuilder
-# ---------------------------------------------------------------------------
 def test_locator_reads_step_functions_event():
-    locator = RawObjectLocator("raw-bucket")
+    locator = RawObjectLocator(BUCKET, RAW_PREFIX)
     assert locator.locate({"bucket": "b", "key": "k.json"}) == ("b", "k.json")
-    assert locator.locate({"key": "k.json"}) == ("raw-bucket", "k.json")
+    assert locator.locate({"key": "k.json"}) == (BUCKET, "k.json")
 
 
 def test_locator_unwraps_step_functions_lambda_invoke_payload():
-    event = {"StatusCode": 200, "Payload": {"status": "SUCCEEDED", "bucket": "b", "key": "k.json"}}
-    assert RawObjectLocator("raw-bucket").locate(event) == ("b", "k.json")
+    event = {
+        "StatusCode": 200,
+        "Payload": {"status": "SUCCEEDED", "bucket": "b", "key": "k.json"},
+    }
+    assert RawObjectLocator(BUCKET, RAW_PREFIX).locate(event) == ("b", "k.json")
 
 
 def test_locator_reads_eventbridge_s3_event():
-    event = {"detail-type": "Object Created", "detail": {"bucket": {"name": "b"}, "object": {"key": "k.json"}}}
-    assert RawObjectLocator("raw-bucket").locate(event) == ("b", "k.json")
+    event = {
+        "detail-type": "Object Created",
+        "detail": {"bucket": {"name": "b"}, "object": {"key": "k.json"}},
+    }
+    assert RawObjectLocator(BUCKET, RAW_PREFIX).locate(event) == ("b", "k.json")
 
 
 class FakeListingS3:
@@ -224,73 +243,133 @@ def test_locator_without_key_uses_newest_json_in_todays_partition():
     s3 = FakeListingS3(
         [
             {"Key": RAW_KEY, "LastModified": datetime(2026, 10, 7, 0, 47)},
-            {"Key": "airplane_ticket_rates/ingest_date=2026-10-07/deals_PHX_2026-10-14_2026-10-21_005019_52b30cfc.json",
-             "LastModified": datetime(2026, 10, 7, 0, 50)},
-            {"Key": "airplane_ticket_rates/ingest_date=2026-10-07/notes.txt", "LastModified": datetime(2026, 10, 7, 1, 0)},
-            {"Key": "airplane_ticket_rates/ingest_date=2026-10-06/old.json", "LastModified": datetime(2026, 10, 8)},
+            {
+                "Key": "raw/extract_date=2026-10-07/deals_PHX_2026-10-14_2026-10-21_005019_52b30cfc.json",
+                "LastModified": datetime(2026, 10, 7, 0, 50),
+            },
+            {
+                "Key": "raw/extract_date=2026-10-07/notes.txt",
+                "LastModified": datetime(2026, 10, 7, 1, 0),
+            },
+            {
+                "Key": "raw/extract_date=2026-10-06/old.json",
+                "LastModified": datetime(2026, 10, 8),
+            },
+            {
+                "Key": "transformed/extract_date=2026-10-07/newer.json",
+                "LastModified": datetime(2026, 10, 7, 2, 0),
+            },
         ]
     )
-    locator = RawObjectLocator("raw-bucket", "airplane_ticket_rates/", client=s3, today=lambda: date(2026, 10, 7))
+    locator = RawObjectLocator(
+        BUCKET,
+        RAW_PREFIX,
+        client=s3,
+        today=lambda: date(2026, 10, 7),
+    )
 
     assert locator.locate({}) == (
-        "raw-bucket",
-        "airplane_ticket_rates/ingest_date=2026-10-07/deals_PHX_2026-10-14_2026-10-21_005019_52b30cfc.json",
+        BUCKET,
+        "raw/extract_date=2026-10-07/deals_PHX_2026-10-14_2026-10-21_005019_52b30cfc.json",
     )
-    assert s3.prefixes == ["airplane_ticket_rates/ingest_date=2026-10-07/"]
+    assert s3.prefixes == ["raw/extract_date=2026-10-07/"]
 
 
-def test_locator_without_key_honours_ingest_date():
-    s3 = FakeListingS3([{"Key": "airplane_ticket_rates/ingest_date=2026-10-06/old.json", "LastModified": datetime(2026, 10, 6)}])
-    locator = RawObjectLocator("raw-bucket", "airplane_ticket_rates/", client=s3, today=lambda: date(2026, 10, 7))
+def test_locator_without_key_honours_extract_date():
+    s3 = FakeListingS3(
+        [
+            {
+                "Key": "raw/extract_date=2026-10-06/old.json",
+                "LastModified": datetime(2026, 10, 6),
+            }
+        ]
+    )
+    locator = RawObjectLocator(
+        BUCKET,
+        RAW_PREFIX,
+        client=s3,
+        today=lambda: date(2026, 10, 7),
+    )
 
-    assert locator.locate({"ingest_date": "2026-10-06"}) == ("raw-bucket", "airplane_ticket_rates/ingest_date=2026-10-06/old.json")
+    assert locator.locate({"extract_date": "2026-10-06"}) == (
+        BUCKET,
+        "raw/extract_date=2026-10-06/old.json",
+    )
+    assert s3.prefixes == ["raw/extract_date=2026-10-06/"]
 
 
 def test_locator_decodes_s3_notification_key():
     event = {
         "Records": [
-            {"s3": {"bucket": {"name": "b"}, "object": {"key": "airplane_ticket_rates/ingest_date%3D2026-10-07/a+b.json"}}}
+            {
+                "s3": {
+                    "bucket": {"name": "b"},
+                    "object": {
+                        "key": "raw/extract_date%3D2026-10-07/a+b.json"
+                    },
+                }
+            }
         ]
     }
-    assert RawObjectLocator("raw-bucket").locate(event) == ("b", "airplane_ticket_rates/ingest_date=2026-10-07/a b.json")
-
-
-def test_locator_rejects_event_without_key_when_partition_is_empty():
-    locator = RawObjectLocator("raw-bucket", client=FakeListingS3([]), today=lambda: date(2026, 10, 7))
-    with pytest.raises(ValueError, match="ingest_date=2026-10-07"):
-        locator.locate({})
-
-
-def test_key_builder_keeps_partition_and_swaps_extension():
-    builder = TransformedKeyBuilder("airplane_ticket_rates/", "flights_clean")
-    assert builder.build(RAW_KEY) == (
-        "flights_clean/ingest_date=2026-10-07/deals_PHX_2026-10-14_2026-10-28_004706_ab12cd34.parquet"
+    assert RawObjectLocator(BUCKET, RAW_PREFIX).locate(event) == (
+        "b",
+        "raw/extract_date=2026-10-07/a b.json",
     )
 
 
-# ---------------------------------------------------------------------------
-# TransformService end to end
-# ---------------------------------------------------------------------------
-def test_service_reads_json_and_writes_parquet():
-    s3 = FakeS3({("raw-bucket", RAW_KEY): json.dumps(make_payload()).encode()})
+def test_locator_rejects_event_without_key_when_partition_is_empty():
+    locator = RawObjectLocator(
+        BUCKET, RAW_PREFIX, client=FakeListingS3([]), today=lambda: date(2026, 10, 7)
+    )
+    with pytest.raises(ValueError, match="raw/extract_date=2026-10-07"):
+        locator.locate({})
 
-    result = build_service(s3).run({"bucket": "raw-bucket", "key": RAW_KEY})
+
+def test_key_builder_swaps_raw_prefix_for_transformed_and_keeps_partition():
+    builder = TransformedKeyBuilder(RAW_PREFIX, TRANSFORMED_PREFIX)
+    assert builder.build(RAW_KEY) == TRANSFORMED_KEY
+
+
+def test_key_builder_accepts_prefixes_without_trailing_slash():
+    builder = TransformedKeyBuilder("raw", "transformed")
+    assert builder.build(RAW_KEY) == TRANSFORMED_KEY
+
+
+# TransformService end to end
+def test_service_reads_json_and_writes_parquet():
+    s3 = FakeS3({(BUCKET, RAW_KEY): json.dumps(make_payload()).encode()})
+
+    result = build_service(s3).run({"bucket": BUCKET, "key": RAW_KEY})
 
     assert result["status"] == "SUCCEEDED"
-    assert result["bucket"] == "transformed-bucket"
-    assert result["key"].endswith(".parquet")
+    assert result["source_bucket"] == BUCKET
+    assert result["source_key"] == RAW_KEY
+    assert result["bucket"] == BUCKET
+    assert result["key"] == TRANSFORMED_KEY
     assert result["row_count"] == 1
     assert result["search_id"] == "6ac5968a919dfa73ed4e0e7c"
 
     put = s3.puts[0]
-    assert put["Bucket"] == "transformed-bucket"
+    assert put["Bucket"] == BUCKET
+    assert put["Key"] == TRANSFORMED_KEY
     written = pq.read_table(io.BytesIO(put["Body"]))
     assert written.to_pylist()[0]["name"] == "Richmond"
 
 
-def test_config_requires_both_buckets(monkeypatch):
-    monkeypatch.setenv("AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", "raw")
-    monkeypatch.delenv("AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET", raising=False)
+def test_config_reads_single_bucket_and_prefixes(monkeypatch):
+    monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", f"arn:aws:s3:::{BUCKET}")
+    monkeypatch.setenv("RAW_PREFIX", " raw/ ")
+    monkeypatch.setenv("TRANSFORMED_PREFIX", "transformed/")
 
-    with pytest.raises(ValueError, match="AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET"):
+    config = TransformConfig.from_env()
+
+    assert config.aws_airplane_ticket_rates_s3_bucket == BUCKET
+    assert config.raw_prefix == RAW_PREFIX
+    assert config.transformed_prefix == TRANSFORMED_PREFIX
+
+
+def test_config_requires_bucket(monkeypatch):
+    monkeypatch.delenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", raising=False)
+
+    with pytest.raises(ValueError, match="AWS_AIRPLANE_TICKET_RATES_S3_BUCKET"):
         TransformConfig.from_env()
