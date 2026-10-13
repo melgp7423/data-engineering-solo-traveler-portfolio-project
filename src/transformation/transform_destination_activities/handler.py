@@ -1,7 +1,10 @@
 """
 Lambda: read every raw Geoapify Places JSON page in one extract_date partition
-from S3, keep only complete activities and the fields the pipeline needs,
-group them by county and write one Parquet file per county back to S3
+from S3, keep only complete activities and the fields the pipeline needs
+(including search_city, the hotel destination the extract searched around),
+group them by county and write one Parquet file per county back to S3.
+Raw pages under destination=<slug>/ keep that folder, so the Parquet output is
+split per search city as well.
 
 Classes and their one job:
     TransformConfig            -> read & validate settings
@@ -192,6 +195,7 @@ class ActivitiesTransformer:
 
     SCHEMA = pa.schema(
         [
+            pa.field("search_city", pa.string()),
             pa.field("name", pa.string()),
             pa.field("country_code", pa.string()),
             pa.field("state", pa.string()),
@@ -218,7 +222,13 @@ class ActivitiesTransformer:
         if not isinstance(properties, dict):
             return None
 
-        row: Dict[str, object] = {}
+        # Added by the extract; null for pages extracted before it was.
+        search_city = properties.get("search_city")
+        row: Dict[str, object] = {
+            "search_city": search_city.strip()
+            if isinstance(search_city, str) and search_city.strip()
+            else None
+        }
         for field_name in self.STRING_FIELDS:
             value = properties.get(field_name)
             if not isinstance(value, str) or not value.strip():

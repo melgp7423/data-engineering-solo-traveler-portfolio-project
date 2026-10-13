@@ -14,12 +14,12 @@ Classes and their one job:
     QueryParamKeyAuthenticator -> add ?apiKey=... to the request
     GeoapifyClient             -> make the HTTP calls
     CityGeocoder               -> city names -> decimal-degree coordinates
-    AreaPolygonBuilder         -> coordinates -> one GeoJSON MultiPolygon
+    AreaPolygonBuilder         -> one destination's coordinates -> a GeoJSON MultiPolygon
     PlacesQueryBuilder         -> build the Places POST body
     ResponseValidator          -> reject API error payloads
     RawObjectKeyBuilder        -> name the S3 objects
     S3RawWriter                -> write bytes to S3
-    ExtractnService            -> orchestrate destinations -> geocode -> places -> store
+    ExtractService             -> orchestrate destinations -> geocode -> places (per destination) -> store
     lambda_handler             -> Lambda entry point
 
 Environment variables (placeholders shown):
@@ -31,7 +31,7 @@ Environment variables (placeholders shown):
     CATEGORIES                                              = tourism,entertainment,leisure,catering.restaurant,beach,natural
     AREA_RADIUS_METERS                                      = 7000   half the side of the square searched around each city
     PLACES_LIMIT                                            = 300    places per page (API max 500)
-    MAX_PAGES                                               = 10     safety cap on Places pages per run
+    MAX_PAGES                                               = 10     safety cap on Places pages per destination
     GEOCODE_CONCURRENCY                                     = 4      cities geocoded at once (free plan allows 5 requests/second)
     PLACES_LANG                                             = en     2-letter language code (not LANG, which Lambda sets itself)
     AWS_DESTINATION_ACTIVITIES_S3_BUCKET                    = <YOUR_RAW_BUCKET_NAME>
@@ -43,6 +43,7 @@ import json
 import logging
 import math
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -586,8 +587,17 @@ class RawObjectKeyBuilder:
     def geocode(self, run: ExtractRun) -> str:
         return f"{self._base(run)}/geocode_{run.started_at:%H%M%S}_{run.run_id}.json"
 
-    def places_page(self, run: ExtractRun, page: int) -> str:
-        return f"{self._base(run)}/places_{run.started_at:%H%M%S}_{run.run_id}_page{page:03d}.json"
+    def places_page(self, run: ExtractRun, destination: str, page: int) -> str:
+        return (
+            f"{self._base(run)}/destination={self._slug(destination)}/"
+            f"places_{run.started_at:%H%M%S}_{run.run_id}_page{page:03d}.json"
+        )
+
+    @staticmethod
+    def _slug(name: str) -> str:
+        # "Detroit, MI" -> "detroit_mi", "San José, Costa Rica" -> "san_josé_costa_rica"
+        slug = re.sub(r"[^\w]+", "_", name.lower()).strip("_")
+        return slug or "unknown"
 
 
 class S3RawWriter:
@@ -616,7 +626,7 @@ class ExtractError(Exception):
 
 
 class ExtractService:
-    """Coordinates geocode destinations -> build area -> page through places -> store."""
+    """Coordinates geocode destinations -> per destination: build area -> page through places -> store."""
 
     def __init__(
         self,
@@ -651,31 +661,17 @@ class ExtractService:
             raise ExtractError(
                 f"None of the {len(names)} destinations could be geocoded: {names}"
             )
-        # Land the raw geocoding result too: the transform step needs it to map
-        # each place back to the destination it belongs to.
+        # Land the raw geocoding result too, so each destination's coordinates
+        # can be traced back to the API response they came from.
         geocode_key = self._writer.write(self._key_builder.geocode(run), geocoded.raw)
 
-        area = self._area_builder.build(geocoded.destinations)
+        # One Places search per destination, so every place can be tagged with
+        # the hotel destination (search city) it was found for.
         page_keys, place_count = [], 0
-        for page in range(self._max_pages):
-            body = {
-                **self._query_builder.build(area, offset=place_count),
-                **(overrides or {}),
-            }
-            raw = self._client.post_json(self._places_url, body).body
-            features = self._validator.validate_places(raw)["features"]
-            if not features:
-                break
-            page_keys.append(
-                self._writer.write(self._key_builder.places_page(run, page), raw)
-            )
-            place_count += len(features)
-            if len(features) < body["limit"]:
-                break
-        else:
-            logger.warning(
-                "Stopped after MAX_PAGES=%d; more places may exist", self._max_pages
-            )
+        for destination in geocoded.destinations:
+            keys, count = self._extract_destination(run, destination, overrides)
+            page_keys.extend(keys)
+            place_count += count
 
         logger.info(
             "Wrote %d places for %d destinations to s3://%s",
@@ -697,6 +693,51 @@ class ExtractService:
             "run_id": run.run_id,
             "extract_date": f"{run.started_at:%Y-%m-%d}",
         }
+
+    def _extract_destination(
+        self,
+        run: ExtractRun,
+        destination: GeocodedDestination,
+        overrides: Optional[Dict],
+    ) -> Tuple[List[str], int]:
+        area = self._area_builder.build([destination])
+        page_keys, place_count = [], 0
+        for page in range(self._max_pages):
+            body = {
+                **self._query_builder.build(area, offset=place_count),
+                **(overrides or {}),
+            }
+            payload = self._validator.validate_places(
+                self._client.post_json(self._places_url, body).body
+            )
+            features = payload["features"]
+            if not features:
+                break
+            self._tag_search_city(features, destination.name)
+            page_keys.append(
+                self._writer.write(
+                    self._key_builder.places_page(run, destination.name, page),
+                    json.dumps(payload).encode("utf-8"),
+                )
+            )
+            place_count += len(features)
+            if len(features) < body["limit"]:
+                break
+        else:
+            logger.warning(
+                "Stopped %r after MAX_PAGES=%d; more places may exist",
+                destination.name,
+                self._max_pages,
+            )
+        logger.info("Found %d places for %r", place_count, destination.name)
+        return page_keys, place_count
+
+    @staticmethod
+    def _tag_search_city(features: List, search_city: str) -> None:
+        """Stamp the destination name from DestinationLocator onto every place."""
+        for feature in features:
+            if isinstance(feature, dict) and isinstance(feature.get("properties"), dict):
+                feature["properties"]["search_city"] = search_city
 
 
 def build_locator(config: ExtractConfig) -> DestinationLocator:

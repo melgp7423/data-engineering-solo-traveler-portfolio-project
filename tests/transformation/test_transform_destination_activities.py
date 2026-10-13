@@ -121,6 +121,7 @@ def test_keeps_only_requested_fields_and_every_category():
 
     assert rows == [
         {
+            "search_city": None,
             "name": "DTE",
             "country_code": "us",
             "state": "Michigan",
@@ -171,6 +172,14 @@ def test_drops_feature_with_empty_required_field(field, value):
     )
 
     assert rows == []
+
+
+def test_keeps_search_city_added_by_extract():
+    rows = ActivitiesTransformer().transform(
+        make_payload([make_feature(search_city=" Detroit, MI ")])
+    )
+
+    assert rows[0]["search_city"] == "Detroit, MI"
 
 
 def test_skips_features_without_properties():
@@ -362,6 +371,7 @@ def test_service_combines_pages_and_writes_one_parquet_per_county():
         ]
     )
     assert wayne.column_names == [
+        "search_city",
         "name",
         "country_code",
         "state",
@@ -439,6 +449,36 @@ def test_service_reads_and_writes_same_bucket_separated_by_prefix():
             "activities-wayne_county-michigan.parquet",
         )
     ]
+
+
+def test_service_writes_search_city_column_in_per_destination_folders():
+    detroit = "extract_date=2026-10-13/destination=detroit_mi/places_1_a_page000.json"
+    ann_arbor = (
+        "extract_date=2026-10-13/destination=ann_arbor_mi/places_1_a_page000.json"
+    )
+    s3 = FakeS3(
+        objects={
+            ("raw-bucket", detroit): raw(
+                make_payload([make_feature(search_city="Detroit, MI")])
+            ),
+            # Same place found from a second search city is kept for both.
+            ("raw-bucket", ann_arbor): raw(
+                make_payload([make_feature(search_city="Ann Arbor, MI")])
+            ),
+        }
+    )
+
+    result = build_service(s3).run({"places_keys": [detroit, ann_arbor]})
+
+    puts = {p["Key"]: read_parquet(p) for p in s3.puts}
+    assert sorted(puts) == [
+        "extract_date=2026-10-13/destination=ann_arbor_mi/activities-wayne_county-michigan.parquet",
+        "extract_date=2026-10-13/destination=detroit_mi/activities-wayne_county-michigan.parquet",
+    ]
+    assert puts[
+        "extract_date=2026-10-13/destination=detroit_mi/activities-wayne_county-michigan.parquet"
+    ].column("search_city").to_pylist() == ["Detroit, MI"]
+    assert result["row_count"] == 2
 
 
 # TransformConfig

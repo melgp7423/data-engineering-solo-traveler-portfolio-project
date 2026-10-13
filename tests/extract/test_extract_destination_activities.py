@@ -304,12 +304,13 @@ def feature(i):
     return {"type": "Feature", "properties": {"name": f"p{i}"}, "geometry": None}
 
 
-def test_service_sends_single_places_request_for_all_destinations():
+def test_service_sends_one_places_search_per_destination():
     cfg = config()
     fake = FakeGeoapify(
         {
             ("POST", "https://geo/places"): [
-                ok({"type": "FeatureCollection", "features": [feature(1)]})
+                ok({"type": "FeatureCollection", "features": [feature(1)]}),
+                ok({"type": "FeatureCollection", "features": [feature(2)]}),
             ]
         },
         cities={"Cancun, Mexico": (21.16, -86.85), "Paris, France": (48.85, 2.35)},
@@ -318,17 +319,50 @@ def test_service_sends_single_places_request_for_all_destinations():
     result = make_service(fake, writer, cfg).run(["Cancun, Mexico", "Paris, France"])
 
     places_calls = [c for c in fake.calls if c[1] == "https://geo/places"]
-    assert len(places_calls) == 1
-    body = places_calls[0][3]
-    assert body["filter"]["type"] == "polygon"
-    assert body["filter"]["geometry"]["type"] == "MultiPolygon"
-    assert len(body["filter"]["geometry"]["coordinates"]) == 2
-    assert body["offset"] == 0
+    assert len(places_calls) == 2
+    for call in places_calls:
+        body = call[3]
+        assert body["filter"]["type"] == "polygon"
+        assert body["filter"]["geometry"]["type"] == "MultiPolygon"
+        assert len(body["filter"]["geometry"]["coordinates"]) == 1
+        assert body["offset"] == 0
 
     assert result["status"] == "SUCCEEDED"
-    assert result["place_count"] == 1
-    assert len(result["places_keys"]) == 1
+    assert result["place_count"] == 2
+    assert len(result["places_keys"]) == 2
     assert result["geocode_key"] in writer.objects
+
+
+def test_service_tags_every_place_with_its_search_city_and_partitions_by_it():
+    fake = FakeGeoapify(
+        {
+            ("POST", "https://geo/places"): [
+                ok({"type": "FeatureCollection", "features": [feature(1), feature(2)]}),
+                ok({"type": "FeatureCollection", "features": [feature(3)]}),
+            ]
+        },
+        cities={"Detroit, MI": (42.33, -83.05), "San José, Costa Rica": (9.93, -84.08)},
+    )
+    writer = FakeWriter()
+    result = make_service(fake, writer, config()).run(
+        ["Detroit, MI", "San José, Costa Rica"]
+    )
+
+    detroit_key, san_jose_key = result["places_keys"]
+    assert "/destination=detroit_mi/places_" in detroit_key
+    assert "/destination=san_josé_costa_rica/places_" in san_jose_key
+    detroit = json.loads(writer.objects[detroit_key])
+    san_jose = json.loads(writer.objects[san_jose_key])
+    assert detroit["type"] == "FeatureCollection"
+    assert [f["properties"]["search_city"] for f in detroit["features"]] == [
+        "Detroit, MI",
+        "Detroit, MI",
+    ]
+    assert [f["properties"]["search_city"] for f in san_jose["features"]] == [
+        "San José, Costa Rica"
+    ]
+    # The API's own fields are left as they were.
+    assert detroit["features"][0]["properties"]["name"] == "p1"
 
 
 def test_service_pages_with_offset_when_a_page_is_full():
@@ -347,6 +381,29 @@ def test_service_pages_with_offset_when_a_page_is_full():
     offsets = [c[3]["offset"] for c in fake.calls if c[1] == "https://geo/places"]
     assert offsets == [0, 2]
     assert result["place_count"] == 3
+    assert [k.rsplit("_", 1)[-1] for k in result["places_keys"]] == [
+        "page000.json",
+        "page001.json",
+    ]
+
+
+def test_service_pages_each_destination_from_offset_zero():
+    cfg = config(places_limit=1)
+    fake = FakeGeoapify(
+        {
+            ("POST", "https://geo/places"): [
+                ok({"features": [feature(1)]}),
+                ok({"features": []}),
+                ok({"features": []}),
+            ]
+        },
+        cities={"X": (1.0, 1.0), "Y": (50.0, 50.0)},
+    )
+    result = make_service(fake, FakeWriter(), cfg).run(["X", "Y"])
+
+    offsets = [c[3]["offset"] for c in fake.calls if c[1] == "https://geo/places"]
+    assert offsets == [0, 1, 0]
+    assert result["place_count"] == 1
 
 
 def test_service_is_partial_when_some_cities_do_not_geocode():
