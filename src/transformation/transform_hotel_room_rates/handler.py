@@ -15,7 +15,6 @@ Classes and their one job:
 
 Environment variables (placeholders shown):
     AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET           = <YOUR_RAW_BUCKET_NAME>
-    AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET   = <YOUR_TRANSFORMED_BUCKET_NAME>
     RAW_PREFIX                                        = ""   folder above extract_date= in the raw bucket ("" = bucket root)
     TRANSFORMED_PREFIX                                = ""   folder above extract_date= in the transformed bucket
 
@@ -49,8 +48,7 @@ logger.setLevel(logging.INFO)
 @dataclass(frozen=True)
 class TransformConfig:
 
-    aws_hotel_room_rates_raw_data_s3_bucket: str
-    aws_hotel_room_rates_transformed_data_s3_bucket: str
+    aws_hotel_room_rates_s3_bucket: str
     raw_prefix: str = ""
     transformed_prefix: str = ""
 
@@ -64,11 +62,8 @@ class TransformConfig:
     @classmethod
     def from_env(cls) -> "TransformConfig":
         config = cls(
-            aws_hotel_room_rates_raw_data_s3_bucket=cls._bucket_from_env(
-                "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET"
-            ),
-            aws_hotel_room_rates_transformed_data_s3_bucket=cls._bucket_from_env(
-                "AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET"
+            aws_hotel_room_rates_s3_bucket=cls._bucket_from_env(
+                "AWS_HOTEL_ROOM_RATES_S3_BUCKET"
             ),
             raw_prefix=os.environ.get("RAW_PREFIX", ""),
             transformed_prefix=os.environ.get("TRANSFORMED_PREFIX", ""),
@@ -78,8 +73,7 @@ class TransformConfig:
 
     def validate(self) -> None:
         required = {
-            "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET": self.aws_hotel_room_rates_raw_data_s3_bucket,
-            "AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET": self.aws_hotel_room_rates_transformed_data_s3_bucket,
+            "AWS_HOTEL_ROOM_RATES_S3_BUCKET": self.aws_hotel_room_rates_s3_bucket
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
@@ -424,12 +418,12 @@ def build_service(config: TransformConfig) -> TransformService:
     """Composition root: the only place that wires the pieces together."""
     return TransformService(
         locator=RawObjectLocator(
-            config.aws_hotel_room_rates_raw_data_s3_bucket, config.raw_prefix
+            config.aws_hotel_room_rates_s3_bucket, config.raw_prefix
         ),
         reader=S3RawReader(),
         transformer=HotelsTransformer(),
         key_builder=TransformedKeyBuilder(config.raw_prefix, config.transformed_prefix),
-        writer=S3ParquetWriter(config.aws_hotel_room_rates_transformed_data_s3_bucket),
+        writer=S3ParquetWriter(config.aws_hotel_room_rates_s3_bucket),
     )
 
 
