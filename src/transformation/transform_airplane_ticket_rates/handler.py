@@ -13,10 +13,10 @@ Classes and their one job:
     lambda_handler           -> Lambda entry point
 
 Environment variables (placeholders shown):
-    AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET          = <YOUR_RAW_BUCKET_NAME>
+    AWS_AIRPLANE_TICKET_RATES_S3_BUCKET             = <YOUR_RAW_BUCKET_NAME>
     AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET  = <YOUR_TRANSFORMED_BUCKET_NAME>
-    RAW_PREFIX                                      = airplane_ticket_rates/
-    TRANSFORMED_PREFIX                              = airplane_ticket_rates/
+    RAW_PREFIX                                      = <RAW_PREFIX>
+    TRANSFORMED_PREFIX                              = <TRANSFORMED_PREFIX>
 
 Supported events:
     Step Functions (output of the extract Lambda): {"bucket": "...", "key": "..."}
@@ -47,10 +47,9 @@ logger.setLevel(logging.INFO)
 @dataclass(frozen=True)
 class TransformConfig:
 
-    aws_airplane_ticket_raw_data_s3_bucket: str
-    aws_airplane_ticket_transformed_data_s3_bucket: str
-    raw_prefix: str = "airplane_ticket_rates/"
-    transformed_prefix: str = "airplane_ticket_rates/"
+    aws_airplane_ticket_rates_s3_bucket: str
+    raw_prefix: str
+    transformed_prefix: str
 
     @staticmethod
     def _bucket_from_env(name: str) -> str:
@@ -62,24 +61,18 @@ class TransformConfig:
     @classmethod
     def from_env(cls) -> "TransformConfig":
         config = cls(
-            aws_airplane_ticket_raw_data_s3_bucket=cls._bucket_from_env(
-                "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET"
+            aws_airplane_ticket_rates_s3_bucket=cls._bucket_from_env(
+                "AWS_AIRPLANE_TICKET_RATES_S3_BUCKET"
             ),
-            aws_airplane_ticket_transformed_data_s3_bucket=cls._bucket_from_env(
-                "AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET"
-            ),
-            raw_prefix=os.environ.get("RAW_PREFIX", "airplane_ticket_rates/"),
-            transformed_prefix=os.environ.get(
-                "TRANSFORMED_PREFIX", "airplane_ticket_rates/"
-            ),
+            raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
+            transformed_prefix=os.environ.get("TRANSFORMED_PREFIX", "").strip(),
         )
         config.validate()
         return config
 
     def validate(self) -> None:
         required = {
-            "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET": self.aws_airplane_ticket_raw_data_s3_bucket,
-            "AWS_AIRPLANE_TICKET_TRANSFORMED_DATA_S3_BUCKET": self.aws_airplane_ticket_transformed_data_s3_bucket,
+            "AWS_AIRPLANE_TICKET_RATES_S3_BUCKET": self.aws_airplane_ticket_rates_s3_bucket
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
@@ -93,7 +86,7 @@ class RawObjectLocator:
     def __init__(
         self,
         default_bucket: str,
-        raw_prefix: str = "airplane_ticket_rates/",
+        raw_prefix: str,
         client=None,
         today: Callable[[], date] = None,
     ):
@@ -338,12 +331,12 @@ def build_service(config: TransformConfig) -> TransformService:
 
     return TransformService(
         locator=RawObjectLocator(
-            config.aws_airplane_ticket_raw_data_s3_bucket, config.raw_prefix
+            config.aws_airplane_ticket_rates_s3_bucket, config.raw_prefix
         ),
         reader=S3RawReader(),
         transformer=DealsTransformer(),
         key_builder=TransformedKeyBuilder(config.raw_prefix, config.transformed_prefix),
-        writer=S3ParquetWriter(config.aws_airplane_ticket_transformed_data_s3_bucket),
+        writer=S3ParquetWriter(config.aws_airplane_ticket_rates_s3_bucket),
     )
 
 
