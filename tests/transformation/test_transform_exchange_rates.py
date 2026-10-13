@@ -62,13 +62,16 @@ class FakeS3:
         return self.paginator
 
 
-def build_service(s3, today=date(2026, 10, 10)):
+def build_service(s3, today=date(2026, 10, 10), raw_prefix="", transformed_prefix=""):
+    # Raw and transformed data share one bucket; the prefixes keep them apart.
     return TransformService(
-        locator=RawObjectLocator("raw-bucket", "", client=s3, today=lambda: today),
+        locator=RawObjectLocator(
+            "travel-bucket", raw_prefix, client=s3, today=lambda: today
+        ),
         reader=S3RawReader(client=s3),
         transformer=ExchangeRatesTransformer(),
-        key_builder=TransformedKeyBuilder("", ""),
-        writer=S3ParquetWriter("transformed-bucket", client=s3),
+        key_builder=TransformedKeyBuilder(raw_prefix, transformed_prefix),
+        writer=S3ParquetWriter("travel-bucket", client=s3),
     )
 
 
@@ -208,8 +211,8 @@ def test_key_builder_mirrors_partition_and_swaps_extension():
 def test_service_writes_parquet_for_every_file_in_partition():
     s3 = FakeS3(
         objects={
-            ("raw-bucket", RAW_KEY): json.dumps(PAYLOAD).encode(),
-            ("raw-bucket", OTHER_KEY): json.dumps({"data": {"CAD": 1.4}}).encode(),
+            ("travel-bucket", RAW_KEY): json.dumps(PAYLOAD).encode(),
+            ("travel-bucket", OTHER_KEY): json.dumps({"data": {"CAD": 1.4}}).encode(),
         },
         pages=[{"Contents": [{"Key": RAW_KEY}, {"Key": OTHER_KEY}]}],
     )
@@ -232,8 +235,8 @@ def test_service_writes_parquet_for_every_file_in_partition():
 def test_service_skips_bad_file_and_reports_partial():
     s3 = FakeS3(
         objects={
-            ("raw-bucket", RAW_KEY): json.dumps(PAYLOAD).encode(),
-            ("raw-bucket", OTHER_KEY): b"not json",
+            ("travel-bucket", RAW_KEY): json.dumps(PAYLOAD).encode(),
+            ("travel-bucket", OTHER_KEY): b"not json",
         },
         pages=[{"Contents": [{"Key": RAW_KEY}, {"Key": OTHER_KEY}]}],
     )
@@ -247,7 +250,7 @@ def test_service_skips_bad_file_and_reports_partial():
 
 def test_service_raises_when_every_file_fails():
     s3 = FakeS3(
-        objects={("raw-bucket", RAW_KEY): b"{}"},
+        objects={("travel-bucket", RAW_KEY): b"{}"},
         pages=[{"Contents": [{"Key": RAW_KEY}]}],
     )
 
@@ -255,11 +258,86 @@ def test_service_raises_when_every_file_fails():
         build_service(s3).run({})
 
 
-def test_config_requires_both_buckets(monkeypatch):
-    monkeypatch.setenv("AWS_EXCHANGE_RATES_RAW_DATA_S3_BUCKET", "raw")
-    monkeypatch.delenv("AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET", raising=False)
+def test_service_reads_and_writes_same_bucket_under_separate_prefixes():
+    raw_key = "raw/exchange_rates/" + RAW_KEY
+    s3 = FakeS3(
+        objects={("travel-bucket", raw_key): json.dumps(PAYLOAD).encode()},
+        pages=[{"Contents": [{"Key": raw_key}]}],
+    )
 
-    with pytest.raises(
-        ValueError, match="AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET"
-    ):
+    result = build_service(
+        s3,
+        raw_prefix="raw/exchange_rates/",
+        transformed_prefix="transformed/exchange_rates/",
+    ).run({})
+
+    assert s3.paginator.calls == [
+        {"Bucket": "travel-bucket", "Prefix": "raw/exchange_rates/extract_date=2026-10-10/"}
+    ]
+    assert result["source_bucket"] == result["bucket"] == "travel-bucket"
+    assert [(p["Bucket"], p["Key"]) for p in s3.puts] == [
+        (
+            "travel-bucket",
+            "transformed/exchange_rates/" + RAW_KEY.replace(".json", ".parquet"),
+        )
+    ]
+
+
+# TransformConfig
+def test_config_from_env_reads_renamed_bucket_variable(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", " travel-bucket ")
+
+    cfg = TransformConfig.from_env()
+
+    assert cfg.aws_exchange_rates_s3_bucket == "travel-bucket"
+
+
+def test_config_from_env_strips_bucket_arn(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", "arn:aws:s3:::travel-bucket")
+
+    assert TransformConfig.from_env().aws_exchange_rates_s3_bucket == "travel-bucket"
+
+
+def test_config_requires_bucket(monkeypatch):
+    monkeypatch.delenv("AWS_EXCHANGE_RATES_S3_BUCKET", raising=False)
+
+    with pytest.raises(ValueError, match="AWS_EXCHANGE_RATES_S3_BUCKET"):
         TransformConfig.from_env()
+
+
+def test_config_rejects_placeholder_bucket(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", "<YOUR_RAW_BUCKET_NAME>")
+
+    with pytest.raises(ValueError, match="AWS_EXCHANGE_RATES_S3_BUCKET"):
+        TransformConfig.from_env()
+
+
+def test_config_from_env_ignores_old_raw_and_transformed_bucket_variables(monkeypatch):
+    monkeypatch.delenv("AWS_EXCHANGE_RATES_S3_BUCKET", raising=False)
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_RAW_DATA_S3_BUCKET", "raw")
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_TRANSFORMED_DATA_S3_BUCKET", "transformed")
+
+    with pytest.raises(ValueError, match="AWS_EXCHANGE_RATES_S3_BUCKET"):
+        TransformConfig.from_env()
+
+
+def test_config_from_env_reads_and_strips_prefixes(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", "travel-bucket")
+    monkeypatch.setenv("RAW_PREFIX", " raw/exchange_rates/ ")
+    monkeypatch.setenv("TRANSFORMED_PREFIX", " transformed/exchange_rates/ ")
+
+    cfg = TransformConfig.from_env()
+
+    assert cfg.raw_prefix == "raw/exchange_rates/"
+    assert cfg.transformed_prefix == "transformed/exchange_rates/"
+
+
+def test_config_from_env_prefixes_default_to_empty(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", "travel-bucket")
+    monkeypatch.delenv("RAW_PREFIX", raising=False)
+    monkeypatch.delenv("TRANSFORMED_PREFIX", raising=False)
+
+    cfg = TransformConfig.from_env()
+
+    assert cfg.raw_prefix == ""
+    assert cfg.transformed_prefix == ""
