@@ -1,24 +1,11 @@
 """
-Lambda: Extract tourist activities from the Geoapify Places API for the
+Lambda: extract tourist activities from the Geoapify Places API for the
 destinations found by extract_hotel_room_rates, and land the raw JSON
 responses in S3
 
 Docs: https://apidocs.geoapify.com/docs/places/
       https://apidocs.geoapify.com/docs/geocoding/forward-geocoding/
 
-How it correlates with the hotels Lambda:
-    1. extract_hotel_room_rates searches hotels for each flight-deal destination
-       and returns {"written": [{"destination": "Cancun, Mexico", ...}, ...]}.
-    2. This Lambda takes those destination names from the event (when chained
-       in Step Functions), or else from the hotel files in TODAY's partition
-       (each file's search_parameters.q).
-    3. Each name is forward-geocoded to decimal-degree lat/lon with the
-       synchronous geocoding API, several cities at a time in parallel. (The
-       batch API was dropped: its jobs sit in a queue and can stay pending for
-       10+ minutes, which made the Lambda time out.)
-    4. A square of AREA_RADIUS_METERS around each city is built, and all squares
-       are sent as a single inline GeoJSON MultiPolygon filter in ONE Places
-       POST request (paged with offset only if results exceed PLACES_LIMIT).
 
 Classes and their one job:
     ExtractConfig              -> read & validate settings
@@ -32,25 +19,24 @@ Classes and their one job:
     ResponseValidator          -> reject API error payloads
     RawObjectKeyBuilder        -> name the S3 objects
     S3RawWriter                -> write bytes to S3
-    ExtractService             -> orchestrate destinations -> geocode -> places -> store
+    ExtractnService            -> orchestrate destinations -> geocode -> places -> store
     lambda_handler             -> Lambda entry point
 
 Environment variables (placeholders shown):
     GEOCODE_SEARCH_URL                                      = https://api.geoapify.com/v1/geocode/search
     PLACES_URL                                              = https://api.geoapify.com/v2/places
     API_KEY_SECRET                                          = prod/travelProject/geoapify   secret value = your Geoapify key
-    AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET                 = bucket the hotels Lambda writes to
-    HOTEL_PREFIX                                            = hotel_room_rates/
+    AWS_HOTEL_ROOM_RATES_S3_BUCKET                          = bucket the hotels Lambda writes to
+    HOTEL_PREFIX                                            = <HOTEL_ROOM_PREFIX>
     CATEGORIES                                              = tourism,entertainment,leisure,catering.restaurant,beach,natural
     AREA_RADIUS_METERS                                      = 7000   half the side of the square searched around each city
     PLACES_LIMIT                                            = 300    places per page (API max 500)
     MAX_PAGES                                               = 10     safety cap on Places pages per run
     GEOCODE_CONCURRENCY                                     = 4      cities geocoded at once (free plan allows 5 requests/second)
     PLACES_LANG                                             = en     2-letter language code (not LANG, which Lambda sets itself)
-    AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET           = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                                              = destination_activities/
+    AWS_DESTINATION_ACTIVITIES_S3_BUCKET                    = <YOUR_RAW_BUCKET_NAME>
+    RAW_PREFIX                                              = <RAW_PREFIX>
     REQUEST_TIMEOUT                                         = 30
-
 """
 
 import json
@@ -74,15 +60,18 @@ logger.setLevel(logging.INFO)
 
 
 # Configuration
+
+
 @dataclass(frozen=True)
 class ExtractConfig:
+    """Holds and validates all runtime settings."""
 
     geocode_url: str
     places_url: str
     api_key_secret: str
-    aws_hotel_room_rates_raw_data_s3_bucket: str
+    aws_hotel_room_rates_s3_bucket: str
     hotel_prefix: str
-    aws_destination_activities_raw_data_s3_bucket: str
+    aws_destination_activities_s3_bucket: str
     raw_prefix: str
     categories: Tuple[str, ...] = (
         "tourism.attraction.artwork",
@@ -115,14 +104,14 @@ class ExtractConfig:
             api_key_secret=os.environ.get(
                 "API_KEY_SECRET", "prod/travelProject/geoapify"
             ),
-            aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get(
-                "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", ""
+            aws_hotel_room_rates_s3_bucket=os.environ.get(
+                "AWS_HOTEL_ROOM_RATES_S3_BUCKET", ""
             ).strip(),
-            hotel_prefix=os.environ.get("HOTEL_PREFIX", "hotel_room_rates/"),
-            aws_destination_activities_raw_data_s3_bucket=os.environ.get(
-                "AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET", ""
+            hotel_prefix=os.environ.get("HOTEL_PREFIX", "").strip(),
+            aws_destination_activities_s3_bucket=os.environ.get(
+                "AWS_DESTINATION_ACTIVITIES_S3_BUCKET", ""
             ).strip(),
-            raw_prefix=os.environ.get("RAW_PREFIX", "destination_activities/"),
+            raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
             categories=tuple(
                 c.strip()
                 for c in os.environ.get(
@@ -146,8 +135,8 @@ class ExtractConfig:
             "GEOCODE_SEARCH_URL": self.geocode_url,
             "PLACES_URL": self.places_url,
             "API_KEY_SECRET": self.api_key_secret,
-            "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET": self.aws_hotel_room_rates_raw_data_s3_bucket,
-            "AWS_DESTINATION_ACTIVITIES_RAW_DATA_S3_BUCKET": self.aws_destination_activities_raw_data_s3_bucket,
+            "AWS_HOTEL_ROOM_RATES_S3_BUCKET": self.aws_hotel_room_rates_s3_bucket,
+            "AWS_DESTINATION_ACTIVITIES_S3_BUCKET": self.aws_destination_activities_s3_bucket,
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
@@ -169,6 +158,8 @@ class ExtractConfig:
 
 
 # Destinations (input from extract_hotel_room_rates)
+
+
 class DestinationsNotFoundError(Exception):
     """Raised when there are no hotel destinations to search around."""
 
@@ -241,7 +232,10 @@ class DestinationLocator:
 
 
 # Secrets
+
+
 class SecretProvider:
+    """Fetches (and caches) the API key from Secrets Manager."""
 
     def __init__(self, secret_id: str, client=None):
         self._secret_id = secret_id
@@ -258,6 +252,7 @@ class SecretProvider:
 
     @staticmethod
     def _extract_key(raw: str) -> str:
+
         if raw.startswith("{"):
             try:
                 parsed = json.loads(raw)
@@ -271,7 +266,10 @@ class SecretProvider:
 
 
 # Authentication
+
+
 class QueryParamKeyAuthenticator:
+    """Geoapify authenticates with ?apiKey=<key> on every request."""
 
     def __init__(self, secrets: SecretProvider, param_name: str = "apiKey"):
         self._secrets = secrets
@@ -282,6 +280,8 @@ class QueryParamKeyAuthenticator:
 
 
 # HTTP
+
+
 @dataclass(frozen=True)
 class HttpResponse:
     status: int
@@ -336,6 +336,8 @@ class GeoapifyClient:
 
 
 # Validation
+
+
 class ApiResponseError(Exception):
     """Raised when the API returns an error payload."""
 
@@ -365,6 +367,8 @@ class ResponseValidator:
 
 
 # Forward geocoding (city name -> decimal-degree coordinates)
+
+
 class GeocodingError(Exception):
     """Raised when a city can't be geocoded after retrying."""
 
@@ -456,6 +460,8 @@ class CityGeocoder:
 
 
 # Search area (all destinations -> one inline MultiPolygon)
+
+
 @dataclass(frozen=True)
 class BoundingBox:
     west: float
@@ -480,6 +486,7 @@ class BoundingBox:
         )
 
     def ring(self) -> List[List[float]]:
+        """Closed, counter-clockwise GeoJSON ring of [lon, lat] positions."""
         return [
             [self.west, self.south],
             [self.east, self.south],
@@ -490,13 +497,6 @@ class BoundingBox:
 
 
 class AreaPolygonBuilder:
-    """
-    Turns each destination's center point into a square of radius_meters
-    (half the side) and combines them into ONE GeoJSON MultiPolygon, so a
-    single Places request covers every destination. Overlapping squares
-    (nearby destinations) are merged, since a valid MultiPolygon can't
-    contain overlapping polygons.
-    """
 
     METERS_PER_DEGREE = 111_320
 
@@ -545,7 +545,10 @@ class AreaPolygonBuilder:
 
 
 # Places query
+
+
 class PlacesQueryBuilder:
+    """Builds the Places POST body for one page."""
 
     def __init__(self, config: ExtractConfig):
         self._config = config
@@ -561,8 +564,11 @@ class PlacesQueryBuilder:
 
 
 # S3 storage
+
+
 @dataclass(frozen=True)
 class ExtractRun:
+    """Identifies one execution."""
 
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -585,6 +591,7 @@ class RawObjectKeyBuilder:
 
 
 class S3RawWriter:
+    """Writes raw bytes to S3 unchanged."""
 
     def __init__(self, bucket: str, client=None):
         self._bucket = bucket
@@ -602,6 +609,8 @@ class S3RawWriter:
 
 
 # Orchestration
+
+
 class ExtractError(Exception):
     """Raised when no destination could be geocoded."""
 
@@ -692,7 +701,7 @@ class ExtractService:
 
 def build_locator(config: ExtractConfig) -> DestinationLocator:
     return DestinationLocator(
-        config.aws_hotel_room_rates_raw_data_s3_bucket, config.hotel_prefix
+        config.aws_hotel_room_rates_s3_bucket, config.hotel_prefix
     )
 
 
@@ -717,7 +726,7 @@ def build_service(config: ExtractConfig) -> ExtractService:
         places_url=config.places_url,
         validator=validator,
         key_builder=RawObjectKeyBuilder(config.raw_prefix),
-        writer=S3RawWriter(config.aws_destination_activities_raw_data_s3_bucket),
+        writer=S3RawWriter(config.aws_destination_activities_s3_bucket),
         max_pages=config.max_pages,
     )
 

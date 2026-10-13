@@ -2,18 +2,6 @@
 Lambda: Extract Google Hotels results from SerpApi for the destinations found
 by extract_airplane_ticket_rates and land each raw JSON response in S3
 
-Docs: https://serpapi.com/google-hotels-api
-
-How it correlates with the flights Lambda:
-    1. extract_airplane_ticket_rates writes today's PHX flight deals to
-       s3://<FLIGHT_DEALS_BUCKET>/airplane_ticket_rates/extract_date=YYYY-MM-DD/...
-    2. This Lambda reads that file. It uses the S3 key passed in the event
-       (the flights Lambda's output, when chained in Step Functions), or else
-       the newest file in TODAY's partition. It never falls back to an older
-       day, so hotel dates can't drift from the flight dates.
-    3. Each unique deal destination (e.g. "Cancun, Mexico") becomes the `q`
-       of one hotel search. MAX_DESTINATIONS caps the number of searches.
-
 Classes and their one job:
     ExtractConfig              -> read & validate settings
     StayDatesCalculator        -> compute check-in / check-out (today + N days)
@@ -33,16 +21,16 @@ Classes and their one job:
 Environment variables (placeholders shown):
     API_URL                                             = https://serpapi.com/search.json
     API_KEY_SECRET                                      = prod/travelProject/serpApi   secret value = your SerpApi key
-    AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET              = bucket the flights Lambda writes to
-    FLIGHT_DEALS_PREFIX                                 = airplane_ticket_rates/
+    AWS_AIRPLANE_TICKET_RATES_S3_BUCKET                 = bucket the flights Lambda writes to
+    FLIGHT_DEALS_PREFIX                                 = <FLIGHT_DEALS_RAW_PREFIX>
     MAX_DESTINATIONS                                    = 50    max hotel searches per run (each costs 1 SerpApi credit)
     CHECK_IN_OFFSET_DAYS                                = 7     check_in_date  = today (UTC) + this many days (matches flight outbound_date)
     CHECK_OUT_OFFSET_DAYS                               = 14    check_out_date = today (UTC) + this many days
     ADULTS                                              = 1
     HOTEL_CLASS                                         = 3,4,5
     CURRENCY                                            = USD
-    AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET             = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                                          = hotel_room_rates/
+    AWS_HOTEL_ROOM_RATES_S3_BUCKET                      = <YOUR_RAW_BUCKET_NAME>
+    RAW_PREFIX                                          = <RAW_PREFIX>
     REQUEST_TIMEOUT                                     = 60
 """
 
@@ -70,9 +58,9 @@ class ExtractConfig:
 
     api_url: str
     api_key_secret: str
-    aws_airplane_ticket_raw_data_s3_bucket: str
+    aws_airplane_ticket_rates_s3_bucket: str
     flight_deals_prefix: str
-    aws_hotel_room_rates_raw_data_s3_bucket: str
+    aws_hotel_room_rates_s3_bucket: str
     raw_prefix: str
     max_destinations: int = 50
     check_in_offset_days: int = 7
@@ -89,16 +77,14 @@ class ExtractConfig:
             api_key_secret=os.environ.get(
                 "API_KEY_SECRET", "prod/travelProject/serpApi"
             ),
-            aws_airplane_ticket_raw_data_s3_bucket=os.environ.get(
-                "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", ""
+            aws_airplane_ticket_rates_s3_bucket=os.environ.get(
+                "AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", ""
             ).strip(),
-            flight_deals_prefix=os.environ.get(
-                "FLIGHT_DEALS_PREFIX", "airplane_ticket_rates/"
-            ),
-            aws_hotel_room_rates_raw_data_s3_bucket=os.environ.get(
-                "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", ""
+            flight_deals_prefix=os.environ.get("FLIGHT_DEALS_PREFIX", "").strip(),
+            aws_hotel_room_rates_s3_bucket=os.environ.get(
+                "AWS_HOTEL_ROOM_RATES_S3_BUCKET", ""
             ).strip(),
-            raw_prefix=os.environ.get("RAW_PREFIX", "hotel_room_rates/"),
+            raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
             max_destinations=int(os.environ.get("MAX_DESTINATIONS", "50")),
             check_in_offset_days=int(os.environ.get("CHECK_IN_OFFSET_DAYS", "7")),
             check_out_offset_days=int(os.environ.get("CHECK_OUT_OFFSET_DAYS", "14")),
@@ -114,8 +100,8 @@ class ExtractConfig:
         required = {
             "API_URL": self.api_url,
             "API_KEY_SECRET": self.api_key_secret,
-            "AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET": self.aws_airplane_ticket_raw_data_s3_bucket,
-            "AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET": self.aws_hotel_room_rates_raw_data_s3_bucket,
+            "AWS_AIRPLANE_TICKET_RATES_S3_BUCKET": self.aws_airplane_ticket_rates_s3_bucket,
+            "AWS_HOTEL_ROOM_RATES_S3_BUCKET": self.aws_hotel_room_rates_s3_bucket,
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
@@ -523,7 +509,7 @@ class ExtractService:
 
 def build_locator(config: ExtractConfig) -> FlightDealsLocator:
     return FlightDealsLocator(
-        config.aws_airplane_ticket_raw_data_s3_bucket, config.flight_deals_prefix
+        config.aws_airplane_ticket_rates_s3_bucket, config.flight_deals_prefix
     )
 
 
@@ -543,7 +529,7 @@ def build_service(config: ExtractConfig) -> ExtractService:
         ),
         validator=ResponseValidator(),
         key_builder=RawObjectKeyBuilder(config.raw_prefix),
-        writer=S3RawWriter(config.aws_hotel_room_rates_raw_data_s3_bucket),
+        writer=S3RawWriter(config.aws_hotel_room_rates_s3_bucket),
     )
 
 
