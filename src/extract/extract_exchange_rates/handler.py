@@ -17,14 +17,14 @@ API docs: https://freecurrencyapi.com/docs/
     -> {"data": {"CAD": 1.4257001775, "MXN": 18.3700024185, "USD": 1}}
 
 Environment variables (placeholders shown):
-    API_BASE_URL      = https://api.freecurrencyapi.com/v1
-    API_ENDPOINT      = latest
-    ACCESS_KEY_SECRET = <SECRETS_MANAGER_SECRET_ID>   secret value = your freecurrencyapi key
-    BASE_CURRENCY     = USD
-    CURRENCIES        = CAD,MXN,USD
-    RAW_BUCKET        = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX        = exchange_rates/
-    REQUEST_TIMEOUT   = 30
+    API_BASE_URL                    = https://api.freecurrencyapi.com/v1
+    API_ENDPOINT                    = latest
+    ACCESS_KEY_SECRET               = <SECRETS_MANAGER_SECRET_ID>   secret value = your freecurrencyapi key
+    BASE_CURRENCY                   = USD
+    CURRENCIES                      = CAD,MXN,USD
+    AWS_EXCHANGE_RATES_S3_BUCKET    = <YOUR_RAW_BUCKET_NAME>
+    RAW_PREFIX                      = <RAW_PREFIX>
+    REQUEST_TIMEOUT                 = 30
 """
 
 import json
@@ -51,7 +51,7 @@ class ExtractConfig:
     api_base_url: str
     api_endpoint: str
     access_key_secret: str
-    raw_bucket: str
+    aws_exchange_rates_s3_bucket: str
     raw_prefix: str
     base_currency: str = "USD"
     currencies: str = "CAD,MXN,USD"
@@ -67,7 +67,9 @@ class ExtractConfig:
             access_key_secret=os.environ.get(
                 "ACCESS_KEY_SECRET", "prod/travelProject/exchangeRatesApi"
             ),
-            raw_bucket=os.environ.get("RAW_BUCKET", "").strip(),
+            aws_exchange_rates_s3_bucket=os.environ.get(
+                "AWS_EXCHANGE_RATES_S3_BUCKET", ""
+            ).strip(),
             raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
             base_currency=os.environ.get("BASE_CURRENCY", "USD").strip().upper(),
             currencies=os.environ.get("CURRENCIES", "CAD,MXN,USD")
@@ -83,7 +85,7 @@ class ExtractConfig:
             "API_BASE_URL": self.api_base_url,
             "API_ENDPOINT": self.api_endpoint,
             "ACCESS_KEY_SECRET": self.access_key_secret,
-            "RAW_BUCKET": self.raw_bucket,
+            "AWS_EXCHANGE_RATES_S3_BUCKET": self.aws_exchange_rates_s3_bucket,
         }
         missing = [k for k, v in required.items() if not v or v.startswith("<")]
         if missing:
@@ -330,7 +332,7 @@ def build_service(config: ExtractConfig) -> ExtractService:
         ),
         validator=ResponseValidator(),
         key_builder=RawObjectKeyBuilder(config.raw_prefix, config.base_currency),
-        writer=S3RawWriter(config.raw_bucket),
+        writer=S3RawWriter(config.aws_exchange_rates_s3_bucket),
         default_params=config.query_params,
     )
 
