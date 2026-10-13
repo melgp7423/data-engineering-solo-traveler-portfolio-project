@@ -398,11 +398,47 @@ def test_service_raises_when_every_file_fails():
         build_service(s3).run({})
 
 
-def test_config_requires_both_buckets(monkeypatch):
-    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "raw")
-    monkeypatch.delenv("AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET", raising=False)
+def test_config_requires_bucket(monkeypatch):
+    monkeypatch.delenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", raising=False)
 
-    with pytest.raises(
-        ValueError, match="AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET"
-    ):
+    with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_RATES_S3_BUCKET"):
         TransformConfig.from_env()
+
+
+def test_config_rejects_placeholder_bucket():
+    with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_RATES_S3_BUCKET"):
+        TransformConfig(
+            aws_hotel_room_rates_s3_bucket="<YOUR_RAW_BUCKET_NAME>"
+        ).validate()
+
+
+def test_config_ignores_old_raw_and_transformed_bucket_variables(monkeypatch):
+    monkeypatch.delenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", raising=False)
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "raw")
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_TRANSFORMED_DATA_S3_BUCKET", "transformed")
+
+    with pytest.raises(ValueError, match="AWS_HOTEL_ROOM_RATES_S3_BUCKET"):
+        TransformConfig.from_env()
+
+
+def test_config_reads_bucket_and_prefixes(monkeypatch):
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", " arn:aws:s3:::travel-bucket ")
+    monkeypatch.setenv("RAW_PREFIX", "raw/hotel_room_rates/")
+    monkeypatch.setenv("TRANSFORMED_PREFIX", "transformed/hotel_room_rates/")
+
+    cfg = TransformConfig.from_env()
+
+    assert cfg.aws_hotel_room_rates_s3_bucket == "travel-bucket"
+    assert cfg.raw_prefix == "raw/hotel_room_rates/"
+    assert cfg.transformed_prefix == "transformed/hotel_room_rates/"
+
+
+def test_config_prefixes_default_to_empty(monkeypatch):
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "travel-bucket")
+    monkeypatch.delenv("RAW_PREFIX", raising=False)
+    monkeypatch.delenv("TRANSFORMED_PREFIX", raising=False)
+
+    cfg = TransformConfig.from_env()
+
+    assert cfg.raw_prefix == ""
+    assert cfg.transformed_prefix == ""

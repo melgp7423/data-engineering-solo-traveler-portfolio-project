@@ -14,7 +14,7 @@ Classes and their one job:
     lambda_handler           -> Lambda entry point
 
 Environment variables (placeholders shown):
-    AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET           = <YOUR_RAW_BUCKET_NAME>
+    AWS_HOTEL_ROOM_RATES_S3_BUCKET                    = <YOUR_BUCKET_NAME>
     RAW_PREFIX                                        = ""   folder above extract_date= in the raw bucket ("" = bucket root)
     TRANSFORMED_PREFIX                                = ""   folder above extract_date= in the transformed bucket
 
