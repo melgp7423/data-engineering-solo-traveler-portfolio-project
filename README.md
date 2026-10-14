@@ -116,14 +116,17 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
  │                     S3 combined bucket (Parquet)                             │
  └──────────────────────────────────────────────────────────────────────────────┘
                                      │
+                                     │
+  ── LOAD ───────────────────────────┼───────────────────────────────────────────
+                                     │
             Lambda: Load transformed data into Amazon Aurora Serverless
                                      │
                                      ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │   GOLD.      Amazon Aurora Serverless combined cluster (Parquet)             │
+ │   GOLD       Amazon Aurora Serverless combined cluster (Parquet)             │
  └──────────────────────────────────────────────────────────────────────────────┘
                                      │
- ── ANALYTICS ───────────────────────┼─────────────────────────────────────────────
+ ── ANALYTICS ───────────────────────┼───────────────────────────────────────────
                                      │
                      Athena (via the Glue Data Catalog)
                                      │
