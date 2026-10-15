@@ -1,4 +1,5 @@
 import sys
+import boto3
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
 from awsglue.context import GlueContext
@@ -565,11 +566,24 @@ AirplaneTicketRates_node1791925972897 = glueContext.create_dynamic_frame.from_ca
     transformation_ctx="AirplaneTicketRates_node1791925972897",
 )
 
-DestinationActivities_node1791925974614 = glueContext.create_dynamic_frame.from_catalog(
-    database="transformed-data-catalog",
-    table_name="destination-activities-transformed",
-    classification="parquet",
-    transformation_ctx="DestinationActivities_node1791925974614",
+
+def read_with_catalog_schema(database, table_name):
+    """Read a parquet catalog table using the Data Catalog's column list instead of
+    the schema Glue infers from the files, so columns missing from older partitions
+    (e.g. longitude/latitude) come through as nulls rather than disappearing."""
+    table = boto3.client("glue").get_table(DatabaseName=database, Name=table_name)[
+        "Table"
+    ]
+    columns = table["StorageDescriptor"]["Columns"] + table.get("PartitionKeys", [])
+    schema = ", ".join(f"`{c['Name']}` {c['Type']}" for c in columns)
+    location = table["StorageDescriptor"]["Location"].rstrip("/") + "/"
+    print(f"[{table_name}] reading {location} with catalog schema: {schema}")
+    df = spark.read.schema(schema).option("basePath", location).parquet(location)
+    return DynamicFrame.fromDF(df, glueContext, table_name)
+
+
+DestinationActivities_node1791925974614 = read_with_catalog_schema(
+    "transformed-data-catalog", "destination-activities-transformed"
 )
 
 CombineDatasets_node1791924321376 = MyTransform(
