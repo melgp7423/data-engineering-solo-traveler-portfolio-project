@@ -78,7 +78,6 @@ class ExtractConfig:
     categories: Tuple[str, ...] = (
         "tourism.attraction.artwork",
         "tourism.attraction.artwork.mural",
-        "tourism.attraction.viewpoint",
         "tourism.sights.archaeological_site",
         "entertainment.culture",
         "entertainment.museum",
@@ -121,7 +120,7 @@ class ExtractConfig:
                 c.strip()
                 for c in os.environ.get(
                     "CATEGORIES",
-                    "tourism.attraction.artwork,tourism.attraction.artwork.mural,tourism.attraction.viewpoint,tourism.sights.archaeological_site,entertainment.culture,entertainment.museum,entertainment.planetarium,entertainment.museum,heritage,natural,beach,national_park,ski",
+                    "tourism.attraction.artwork,tourism.attraction.artwork.mural,tourism.sights.archaeological_site,entertainment.culture,entertainment.museum,entertainment.planetarium,entertainment.museum,heritage,natural,beach,national_park,ski",
                 ).split(",")
                 if c.strip()
             ),
