@@ -385,7 +385,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         F.round(F.min("nightly_usd"), 2).alias("hotel_min_nightly_usd"),
         F.round(F.avg("nightly_usd"), 2).alias("hotel_avg_nightly_usd"),
         F.expr("min_by(hotel_name, price_usd)").alias("cheapest_hotel"),
-        F.round(F.avg("overall_rating"), 2).alias("hotel_avg_rating"),
     )
 
     flights = apply_city_filter(
@@ -527,7 +526,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         "hotel_min_nightly_usd",
         "hotel_avg_nightly_usd",
         "cheapest_hotel",
-        "hotel_avg_rating",
         "activity_count",
         "activity_examples",
         "activity_categories",
