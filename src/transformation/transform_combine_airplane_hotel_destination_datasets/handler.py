@@ -1,25 +1,19 @@
 import sys
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
-from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.dynamicframe import DynamicFrameCollection
 from awsglue.dynamicframe import DynamicFrame
+from pyspark.sql import functions as F
+from pyspark.sql import Window
+from pyspark.context import SparkContext
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from pyspark.sql import functions as F
-
-# test
+from itertools import chain
 
 
 def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
-    import sys
-    from itertools import chain
-    from awsglue.dynamicframe import DynamicFrame
-    from awsglue.utils import getResolvedOptions
-    from pyspark.sql import Window
-    from pyspark.sql import functions as F
 
     # CONFIG
 
