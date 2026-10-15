@@ -128,6 +128,8 @@ def test_keeps_only_requested_fields_and_every_category():
             "county": "Wayne County",
             "city": "Detroit",
             "formatted": "DTE, 3rd Avenue, Detroit, MI 48226, United States of America",
+            "longitude": -83.0576393,
+            "latitude": 42.3325668,
             "categories": [
                 "tourism",
                 "tourism.attraction",
@@ -180,6 +182,50 @@ def test_keeps_search_city_added_by_extract():
     )
 
     assert rows[0]["search_city"] == "Detroit, MI"
+
+
+def test_reads_coordinates_from_properties_not_geometry():
+    feature = make_feature(lon=-80.1973615, lat=25.7752802)
+    feature["geometry"]["coordinates"] = [0.0, 0.0]
+
+    rows = ActivitiesTransformer().transform(make_payload([feature]))
+
+    assert (rows[0]["longitude"], rows[0]["latitude"]) == (-80.1973615, 25.7752802)
+
+
+@pytest.mark.parametrize("lon,lat", [(..., ...), (None, None), ("-83.05", True)])
+def test_keeps_feature_with_missing_coordinates_as_null(lon, lat):
+    rows = ActivitiesTransformer().transform(
+        make_payload([make_feature(lon=lon, lat=lat)])
+    )
+
+    assert (rows[0]["longitude"], rows[0]["latitude"]) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "raw_name,expected",
+    [
+        ('"Flora" The Gatherer of Dreams', "Flora The Gatherer of Dreams"),
+        ("'Flora' The Gatherer of Dreams", "Flora The Gatherer of Dreams"),
+        ("\u201cFlora\u201d The Gatherer", "Flora The Gatherer"),
+        ("Flora\\ The Gatherer/", "Flora The Gatherer"),
+        ("Art/Design Center", "Art Design Center"),
+        ("Joe's Stone Crab", "Joe's Stone Crab"),
+        ("DTE", "DTE"),
+    ],
+)
+def test_cleans_quotes_and_slashes_from_name(raw_name, expected):
+    rows = ActivitiesTransformer().transform(
+        make_payload([make_feature(name=raw_name)])
+    )
+
+    assert rows[0]["name"] == expected
+
+
+def test_drops_feature_whose_name_is_only_quotes_and_slashes():
+    rows = ActivitiesTransformer().transform(make_payload([make_feature(name='" / "')]))
+
+    assert rows == []
 
 
 def test_skips_features_without_properties():
@@ -378,6 +424,8 @@ def test_service_combines_pages_and_writes_one_parquet_per_county():
         "county",
         "city",
         "formatted",
+        "longitude",
+        "latitude",
         "categories",
     ]
     assert set(wayne.column("county").to_pylist()) == {"Wayne County"}

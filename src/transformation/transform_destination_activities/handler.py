@@ -192,6 +192,14 @@ class InvalidRawPayloadError(Exception):
 class ActivitiesTransformer:
 
     STRING_FIELDS = ("name", "country_code", "state", "county", "city", "formatted")
+    COORDINATE_FIELDS = (("longitude", "lon"), ("latitude", "lat"))
+
+    # Double quotes and slashes anywhere; single quotes only when they wrap a
+    # word, so apostrophes like "Joe's" survive.
+    # '"Flora" The Gatherer of Dreams' -> 'Flora The Gatherer of Dreams'
+    _NAME_JUNK = re.compile(
+        r"[\"\u201c\u201d\u201e/\\]|(?<!\w)['\u2018\u2019`]|['\u2018\u2019`](?!\w)"
+    )
 
     SCHEMA = pa.schema(
         [
@@ -202,6 +210,8 @@ class ActivitiesTransformer:
             pa.field("county", pa.string()),
             pa.field("city", pa.string()),
             pa.field("formatted", pa.string()),
+            pa.field("longitude", pa.float64()),
+            pa.field("latitude", pa.float64()),
             pa.field("categories", pa.list_(pa.string())),
         ]
     )
@@ -235,6 +245,19 @@ class ActivitiesTransformer:
                 return None
             row[field_name] = value.strip()
 
+        row["name"] = self.clean_name(row["name"])
+        if not row["name"]:
+            return None
+
+        # From properties.lon / properties.lat, not geometry.coordinates.
+        for column, source in self.COORDINATE_FIELDS:
+            value = properties.get(source)
+            row[column] = (
+                float(value)
+                if isinstance(value, (int, float)) and not isinstance(value, bool)
+                else None
+            )
+
         categories = properties.get("categories")
         if not isinstance(categories, list):
             return None
@@ -242,6 +265,10 @@ class ActivitiesTransformer:
         if not row["categories"]:
             return None
         return row
+
+    @classmethod
+    def clean_name(cls, name: str) -> str:
+        return re.sub(r"\s+", " ", cls._NAME_JUNK.sub(" ", name)).strip()
 
 
 class CountyGrouper:
