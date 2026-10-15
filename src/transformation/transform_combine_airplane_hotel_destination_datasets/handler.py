@@ -286,6 +286,8 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
                 "THEN filter(categories, c -> NOT startswith(c, 'access'))[0] END"
             ).alias("category"),
             "categories",
+            F.col("longitude").cast("double").alias("longitude"),
+            F.col("latitude").cast("double").alias("latitude"),
         )
     ).filter(F.col("city").isNotNull() & (F.col("city") != ""))
 
@@ -308,16 +310,25 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
     )
 
     activity_items = activities.groupBy("city", "name").agg(
-        F.first("category", ignorenulls=True).alias("category")
+        F.first("category", ignorenulls=True).alias("category"),
+        F.first("longitude", ignorenulls=True).alias("longitude"),
+        F.first("latitude", ignorenulls=True).alias("latitude"),
     )
 
     activities_summary = (
         activity_items.groupBy("city")
         .agg(
             F.count("*").alias("activity_count"),
-            # [{name: "Light Matrix", category: "tourism"}, ...] sorted by name, max 10
+            # [{name: "Light Matrix", category: "tourism", longitude: -80.12, latitude: 25.79}, ...]
+            # sorted by name, max 10
             F.slice(
-                F.array_sort(F.collect_list(F.struct("name", "category"))), 1, 10
+                F.array_sort(
+                    F.collect_list(
+                        F.struct("name", "category", "longitude", "latitude")
+                    )
+                ),
+                1,
+                10,
             ).alias("activity_examples"),
         )
         .join(
