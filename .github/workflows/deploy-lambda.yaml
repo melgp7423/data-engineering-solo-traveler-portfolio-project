@@ -9,6 +9,7 @@ on:
 
 env:
   AWS_REGION: us-east-2
+  # transform_combine_airplane_hotel_destination_datasets is a Glue job, deployed by deploy-glue.yaml
   # Maps each lambda folder (src/extract/ for extraction, src/transformation/ for transformation) to its AWS Lambda function ARN
   # ARNs come from repository secrets (same names as the local .env file)
   FUNCTION_NAMES: >-
@@ -20,8 +21,7 @@ env:
       "transform_exchange_rates": "${{ secrets.AWS_TRANSFORM_EXCHANGE_RATES_ARN }}",
       "transform_airplane_ticket_rates": "${{ secrets.AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN }}",
       "transform_hotel_room_rates": "${{ secrets.AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN }}",
-      "transform_destination_activities": "${{ secrets.AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN }}",
-      "transform_combine_airplane_hotel_destination_datasets": "${{ secrets.AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_ARN }}"
+      "transform_destination_activities": "${{ secrets.AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN }}"
     }
 
 jobs:
@@ -40,44 +40,40 @@ jobs:
             extract_exchange_rates:
               - 'src/extract/extract_exchange_rates/**'
               - 'tests/extract/test_extract_exchange_rates.py'
-              - '.github/workflows/deploy.yaml'
+              - '.github/workflows/deploy-lambda.yaml'
             extract_airplane_ticket_rates:
               - 'src/extract/extract_airplane_ticket_rates/**'
               - 'tests/extract/test_extract_airplane_ticket_rates.py'
-              - '.github/workflows/deploy.yaml'
+              - '.github/workflows/deploy-lambda.yaml'
             extract_hotel_room_rates:
               - 'src/extract/extract_hotel_room_rates/**'
               - 'tests/extract/test_extract_hotel_room_rates.py'
-              - '.github/workflows/deploy.yaml'
+              - '.github/workflows/deploy-lambda.yaml'
             extract_destination_activities:
               - 'src/extract/extract_destination_activities/**'
               - 'tests/extract/test_extract_destination_activities.py'
-              - '.github/workflows/deploy.yaml'
+              - '.github/workflows/deploy-lambda.yaml'
             transform_exchange_rates:
               - 'src/transformation/transform_exchange_rates/**'
               - 'tests/transformation/test_transform_exchange_rates.py'
-              - '.github/workflows/deploy.yaml'
+              - '.github/workflows/deploy-lambda.yaml'
             transform_airplane_ticket_rates:
               - 'src/transformation/transform_airplane_ticket_rates/**'
               - 'tests/transformation/test_transform_airplane_ticket_rates.py'
-              - '.github/workflows/deploy.yaml'
+              - '.github/workflows/deploy-lambda.yaml'
             transform_hotel_room_rates:
               - 'src/transformation/transform_hotel_room_rates/**'
               - 'tests/transformation/test_transform_hotel_room_rates.py'
-              - '.github/workflows/deploy.yaml'
+              - '.github/workflows/deploy-lambda.yaml'
             transform_destination_activities:
               - 'src/transformation/transform_destination_activities/**'
               - 'tests/transformation/test_transform_destination_activities.py'
-              - '.github/workflows/deploy.yaml'
-            transform_combine_airplane_hotel_destination_datasets:
-              - 'src/transformation/transform_combine_airplane_hotel_destination_datasets/**'
-              - 'tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py'
-              - '.github/workflows/deploy.yaml'
+              - '.github/workflows/deploy-lambda.yaml'
 
       - id: set
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo 'lambdas=["extract_exchange_rates","extract_airplane_ticket_rates","extract_hotel_room_rates","extract_destination_activities","transform_exchange_rates","transform_airplane_ticket_rates","transform_hotel_room_rates","transform_destination_activities","transform_combine_airplane_hotel_destination_datasets"]' >> "$GITHUB_OUTPUT"
+            echo 'lambdas=["extract_exchange_rates","extract_airplane_ticket_rates","extract_hotel_room_rates","extract_destination_activities","transform_exchange_rates","transform_airplane_ticket_rates","transform_hotel_room_rates","transform_destination_activities"]' >> "$GITHUB_OUTPUT"
           else
             echo 'lambdas=${{ steps.filter.outputs.changes }}' >> "$GITHUB_OUTPUT"
           fi

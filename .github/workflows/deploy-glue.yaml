@@ -1,0 +1,84 @@
+name: CI/CD - Glue Jobs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/transformation/transform_combine_airplane_hotel_destination_datasets/**"
+      - "tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py"
+      - ".github/workflows/deploy-glue.yaml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/transformation/transform_combine_airplane_hotel_destination_datasets/**"
+      - "tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py"
+      - ".github/workflows/deploy-glue.yaml"
+  workflow_dispatch: # manual run deploys the glue job
+
+env:
+  AWS_REGION: us-east-2
+  JOB_DIR: src/transformation/transform_combine_airplane_hotel_destination_datasets
+  SCRIPT_FILE: handler.py
+  TEST_FILE: tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install pytest
+          if [ -s "$JOB_DIR/requirements.txt" ]; then
+            pip install -r "$JOB_DIR/requirements.txt"
+          fi
+
+      - name: Run tests
+        env:
+          PYTHONPATH: src
+        run: |
+          if [ ! -f "$TEST_FILE" ]; then
+            echo "No test file at $TEST_FILE, skipping"
+            exit 0
+          fi
+          pytest "$TEST_FILE" || [ $? -eq 5 ]
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - name: Deploy to Glue
+        env:
+          JOB_NAME: ${{ secrets.AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB }}
+        run: |
+          if [ -z "$JOB_NAME" ]; then
+            echo "::error::No Glue job name - add the AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB repository secret"
+            exit 1
+          fi
+          JOB_NAME="${JOB_NAME##*:job/}" # accept a bare job name or an ARN
+          SCRIPT_LOCATION=$(aws glue get-job --job-name "$JOB_NAME" \
+            --query 'Job.Command.ScriptLocation' --output text)
+          if [[ "$SCRIPT_LOCATION" != s3://* ]]; then
+            echo "::error::Glue job $JOB_NAME has no S3 script location (got '$SCRIPT_LOCATION')"
+            exit 1
+          fi
+          # Keep a copy per commit next to the live script so a deploy can be rolled back
+          aws s3 cp "$JOB_DIR/$SCRIPT_FILE" "${SCRIPT_LOCATION%/*}/history/${{ github.sha }}/$SCRIPT_FILE"
+          aws s3 cp "$JOB_DIR/$SCRIPT_FILE" "$SCRIPT_LOCATION"
+          echo "Deployed $SCRIPT_FILE to $SCRIPT_LOCATION for Glue job $JOB_NAME"
