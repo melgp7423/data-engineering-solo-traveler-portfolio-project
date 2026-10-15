@@ -30,13 +30,14 @@ Environment variables (placeholders shown):
     HOTEL_PREFIX                                            = <HOTEL_ROOM_PREFIX>
     CATEGORIES                                              = tourism,entertainment,leisure,catering.restaurant,beach,natural
     AREA_RADIUS_METERS                                      = 7000   half the side of the square searched around each city
-    PLACES_LIMIT                                            = 300    places per page (API max 500)
+    PLACES_LIMIT                                            = 500    places per page (API max 500)
     MAX_PAGES                                               = 10     safety cap on Places pages per destination
     GEOCODE_CONCURRENCY                                     = 4      cities geocoded at once (free plan allows 5 requests/second)
     PLACES_LANG                                             = en     2-letter language code (not LANG, which Lambda sets itself)
     AWS_DESTINATION_ACTIVITIES_S3_BUCKET                    = <YOUR_RAW_BUCKET_NAME>
     RAW_PREFIX                                              = <RAW_PREFIX>
     REQUEST_TIMEOUT                                         = 30
+
 """
 
 import json
@@ -78,16 +79,19 @@ class ExtractConfig:
         "tourism.attraction.artwork",
         "tourism.attraction.artwork.mural",
         "tourism.attraction.viewpoint",
+        "tourism.sights.archaeological_site",
         "entertainment.culture",
+        "entertainment.museum",
+        "entertainment.planetarium",
+        "entertainment.museum",
         "heritage",
         "natural",
         "beach",
         "national_park",
         "ski",
     )
-
     area_radius_meters: int = 7000
-    places_limit: int = 300
+    places_limit: int = 500
     max_pages: int = 10
     geocode_concurrency: int = 4
     lang: str = "en"
@@ -117,12 +121,12 @@ class ExtractConfig:
                 c.strip()
                 for c in os.environ.get(
                     "CATEGORIES",
-                    "tourism.attraction.artwork,tourism.attraction.artwork.mural,tourism.attraction.viewpoint,entertainment.culture,heritage,natural,beach,national_park,ski",
+                    "tourism.attraction.artwork,tourism.attraction.artwork.mural,tourism.attraction.viewpoint,tourism.sights.archaeological_site,entertainment.culture,entertainment.museum,entertainment.planetarium,entertainment.museum,heritage,natural,beach,national_park,ski",
                 ).split(",")
                 if c.strip()
             ),
             area_radius_meters=int(os.environ.get("AREA_RADIUS_METERS", "7000")),
-            places_limit=int(os.environ.get("PLACES_LIMIT", "300")),
+            places_limit=int(os.environ.get("PLACES_LIMIT", "500")),
             max_pages=int(os.environ.get("MAX_PAGES", "10")),
             geocode_concurrency=int(os.environ.get("GEOCODE_CONCURRENCY", "4")),
             lang=os.environ.get("PLACES_LANG", "en").strip().lower(),
@@ -736,7 +740,9 @@ class ExtractService:
     def _tag_search_city(features: List, search_city: str) -> None:
         """Stamp the destination name from DestinationLocator onto every place."""
         for feature in features:
-            if isinstance(feature, dict) and isinstance(feature.get("properties"), dict):
+            if isinstance(feature, dict) and isinstance(
+                feature.get("properties"), dict
+            ):
                 feature["properties"]["search_city"] = search_city
 
 
