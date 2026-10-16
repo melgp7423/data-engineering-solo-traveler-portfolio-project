@@ -126,7 +126,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
                                      │
                                      ▼
  ┌──────────────────────────────────────────────────────────────────────────────┐
- │   GOLD       Amazon Aurora Serverless combined cluster (Parquet)             │
+ │   GOLD       Amazon Aurora Serverless clusters (Parquet)                     │
  └──────────────────────────────────────────────────────────────────────────────┘
                                      │
  ── ANALYTICS ───────────────────────┼───────────────────────────────────────────
