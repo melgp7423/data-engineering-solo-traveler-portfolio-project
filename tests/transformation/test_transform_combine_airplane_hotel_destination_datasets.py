@@ -130,7 +130,12 @@ def flight_rows():
         ("Washington, D.C.", 250.0, 300, "2026-10-23", "2026-10-30", EXTRACT_DATE),
         ("Washington, D.C.", 200.0, 320, "2026-10-24", "2026-10-31", EXTRACT_DATE),
         ("Vancouver", 400.0, 180, "2026-10-23", "2026-10-30", EXTRACT_DATE),
+        # Flights only: dropped.
         ("Page", 300.0, 90, "2026-10-23", "2026-10-30", EXTRACT_DATE),
+        # Hotels but no activities: dropped.
+        ("Austin", 180.0, 150, "2026-10-23", "2026-10-30", EXTRACT_DATE),
+        # Activities but no hotels: dropped.
+        ("Boise", 220.0, 110, "2026-10-23", "2026-10-30", EXTRACT_DATE),
         # Older extract: must not leak into the run.
         ("Denver", 99.0, 120, "2026-10-16", "2026-10-23", OLD_EXTRACT_DATE),
     ]
@@ -170,6 +175,28 @@ def hotel_rows():
             4,
             "Harbour Hotel",
             EXTRACT_DATE,
+        ),
+        (
+            "Austin, United States",
+            "USD",
+            600.0,
+            "2026-10-23",
+            "2026-10-30",
+            4.0,
+            3,
+            "Congress Lodge",
+            EXTRACT_DATE,
+        ),
+        (
+            "Denver, United States",
+            "USD",
+            500.0,
+            "2026-10-16",
+            "2026-10-23",
+            4.1,
+            3,
+            "Old Extract Inn",
+            OLD_EXTRACT_DATE,
         ),
     ]
 
@@ -234,7 +261,6 @@ def activity_rows():
             "ca",
             OLD_EXTRACT_DATE,
         ),
-        # Destination with no flights or hotels: not added as a row.
         (
             "boise_united_states",
             "Boise Depot",
@@ -244,6 +270,27 @@ def activity_rows():
             43.6,
             "us",
             EXTRACT_DATE,
+        ),
+        # Destination with no flights or hotels: not added as a row.
+        (
+            "omaha_united_states",
+            "Old Market",
+            "Old Market, Omaha, NE",
+            ["tourism"],
+            -95.93,
+            41.26,
+            "us",
+            EXTRACT_DATE,
+        ),
+        (
+            "denver_united_states",
+            "Red Rocks",
+            "Red Rocks, Morrison, CO",
+            ["tourism"],
+            -105.2,
+            39.66,
+            "us",
+            OLD_EXTRACT_DATE,
         ),
     ]
 
@@ -273,8 +320,8 @@ def rows(spark):
     return run_transform(spark)
 
 
-def test_one_row_per_flight_or_hotel_city_from_the_latest_extract(rows):
-    assert sorted(rows) == ["page", "vancouver", "washington"]
+def test_one_row_per_city_with_hotels_and_activities_from_the_latest_extract(rows):
+    assert sorted(rows) == ["vancouver", "washington"]
 
 
 def test_washington_dc_activities_join_the_washington_row(rows):
@@ -292,12 +339,21 @@ def test_activity_category_skips_access_flags(rows):
     assert rows["washington"].activity_categories == ["tourism"]
 
 
-def test_city_without_activities_is_flagged(rows):
-    page = rows["page"]
-    assert page.has_activities is False
-    assert page.activity_count is None
-    assert page.has_hotels is False
-    assert page.est_min_trip_cost_usd is None
+@pytest.mark.parametrize(
+    "city",
+    [
+        "page",  # flights only
+        "austin",  # hotels, no activities
+        "boise",  # activities, no hotels
+        "omaha",  # activities only, no flights or hotels
+    ],
+)
+def test_cities_missing_hotels_or_activities_are_dropped(rows, city):
+    assert city not in rows
+
+
+def test_every_row_has_hotels_and_activities(rows):
+    assert all(r.has_hotels and r.has_activities for r in rows.values())
 
 
 def test_flight_and_hotel_summaries(rows):
@@ -340,14 +396,23 @@ def test_foreign_hotel_prices_convert_with_the_latest_rate(rows):
 
 
 def test_country_falls_back_to_activities_then_known_city_list(spark):
+    # Hotel searches without a country, so hotel_country is null.
+    def hotel(q):
+        return (q, "USD", 500.0, "2026-10-23", "2026-10-30", 4.0, 3, "Inn", EXTRACT_DATE)
+
+    # No country suffix or country_code on Cancun/Page, so activity_country is null.
+    def activity(destination, country_code):
+        return (destination, "Main Plaza", "Main Plaza", ["tourism"], 0.0, 0.0, country_code, EXTRACT_DATE)
+
     rows = run_transform(
         spark,
-        flights=[
-            ("Vancouver", 400.0, 180, "2026-10-23", "2026-10-30", EXTRACT_DATE),
-            ("Cancun", 350.0, 240, "2026-10-23", "2026-10-30", EXTRACT_DATE),
-            ("Page", 300.0, 90, "2026-10-23", "2026-10-30", EXTRACT_DATE),
+        flights=[],
+        hotels=[hotel("Vancouver"), hotel("Cancun"), hotel("Page")],
+        activities=[
+            activity("vancouver_canada", "ca"),
+            activity("cancun", None),
+            activity("page", None),
         ],
-        hotels=[],
     )
     assert (rows["vancouver"].country, rows["vancouver"].country_source) == (
         "CA",
@@ -373,3 +438,4 @@ def test_extract_date_job_arg_selects_that_extract(spark, monkeypatch):
     rows = run_transform(spark)
     assert sorted(rows) == ["denver"]
     assert rows["denver"].flight_min_usd == 99.0
+    assert rows["denver"].cheapest_hotel == "Old Extract Inn"

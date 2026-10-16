@@ -498,6 +498,19 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         .withColumn("processed_at", F.current_timestamp())
     )
 
+    # Only keep cities with both hotels and activities to recommend.
+    incomplete = (
+        combined.filter(~(F.col("has_hotels") & F.col("has_activities")))
+        .select("city", "has_hotels", "has_activities")
+        .collect()
+    )
+    if incomplete:
+        print(
+            "[combined] dropping cities missing hotels or activities: "
+            f"{sorted((r.city, r.has_hotels, r.has_activities) for r in incomplete)}"
+        )
+    combined = combined.filter(F.col("has_hotels") & F.col("has_activities"))
+
     ordered = [
         "city",
         "destination_name",
@@ -610,7 +623,7 @@ def main():
         transformation_ctx="SelectCombined_node",
     )
 
-    OUTPUT_PATH = "s3://combine-datasets-transformation-075996947402-us-east-2-an/"
+    OUTPUT_PATH = ""
     if "--OUTPUT_PATH" in sys.argv:
         OUTPUT_PATH = getResolvedOptions(sys.argv, ["OUTPUT_PATH"])["OUTPUT_PATH"]
 
