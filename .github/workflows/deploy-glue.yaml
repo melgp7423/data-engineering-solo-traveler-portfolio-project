@@ -6,24 +6,41 @@ on:
     paths:
       - "src/transformation/transform_combine_airplane_hotel_destination_datasets/**"
       - "tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py"
+      - "src/load/load_gold_layer/**"
+      - "tests/load/test_load_gold_layer.py"
       - ".github/workflows/deploy-glue.yaml"
   pull_request:
     branches: [main]
     paths:
       - "src/transformation/transform_combine_airplane_hotel_destination_datasets/**"
       - "tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py"
+      - "src/load/load_gold_layer/**"
+      - "tests/load/test_load_gold_layer.py"
       - ".github/workflows/deploy-glue.yaml"
-  workflow_dispatch: # manual run deploys the glue job
+  workflow_dispatch: # manual run deploys both glue jobs
 
 env:
   AWS_REGION: us-east-2
-  JOB_DIR: src/transformation/transform_combine_airplane_hotel_destination_datasets
   SCRIPT_FILE: handler.py
-  TEST_FILE: tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: &glue_jobs
+        include:
+          - name: transform_combine_airplane_hotel_destination_datasets
+            job_dir: src/transformation/transform_combine_airplane_hotel_destination_datasets
+            test_file: tests/transformation/test_transform_combine_airplane_hotel_destination_datasets.py
+            job_secret: AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB
+          - name: load_gold_layer
+            job_dir: src/load/load_gold_layer
+            test_file: tests/load/test_load_gold_layer.py
+            job_secret: AWS_LOAD_GOLD_LAYER_GLUE_JOB
+    env:
+      JOB_DIR: ${{ matrix.job_dir }}
+      TEST_FILE: ${{ matrix.test_file }}
     steps:
       - uses: actions/checkout@v4
 
@@ -52,6 +69,11 @@ jobs:
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: *glue_jobs
+    env:
+      JOB_DIR: ${{ matrix.job_dir }}
     permissions:
       id-token: write
       contents: read
@@ -63,12 +85,12 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
 
-      - name: Deploy to Glue
+      - name: Deploy ${{ matrix.name }} to Glue
         env:
-          JOB_NAME: ${{ secrets.AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB }}
+          JOB_NAME: ${{ secrets[matrix.job_secret] }}
         run: |
           if [ -z "$JOB_NAME" ]; then
-            echo "::error::No Glue job name - add the AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB repository secret"
+            echo "::error::No Glue job name - add the ${{ matrix.job_secret }} repository secret"
             exit 1
           fi
           JOB_NAME="${JOB_NAME##*:job/}" # accept a bare job name or an ARN
