@@ -16,7 +16,7 @@ except ImportError:
 
 from transformation.transform_destination_activities.handler import (
     ActivitiesTransformer,
-    CityGrouper,
+    DestinationGrouper,
     InvalidRawPayloadError,
     RawObjectLocator,
     S3ParquetWriter,
@@ -100,7 +100,7 @@ def build_service(s3, today=date(2026, 10, 9), transformed_prefix=""):
         locator=RawObjectLocator("raw-bucket", "", client=s3, today=lambda: today),
         reader=S3RawReader(client=s3),
         transformer=ActivitiesTransformer(),
-        grouper=CityGrouper(),
+        grouper=DestinationGrouper(),
         key_builder=TransformedKeyBuilder("", transformed_prefix),
         writer=S3ParquetWriter("transformed-bucket", client=s3),
     )
@@ -238,51 +238,66 @@ def test_rejects_payload_without_features():
         ActivitiesTransformer().transform({"type": "FeatureCollection"})
 
 
-# CityGrouper
-def test_groups_rows_by_city_one_row_per_activity_and_drops_duplicates():
+# DestinationGrouper
+def test_groups_every_city_in_a_destination_into_one_table_and_drops_duplicates():
+    sf = "extract_date=2026-10-16/destination=san_francisco_united_states"
+    detroit = "extract_date=2026-10-16/destination=detroit_mi"
     transformer = ActivitiesTransformer()
-    rows = transformer.transform(
+    sf_rows = transformer.transform(
         make_payload(
             [
-                make_feature(name="DTE"),
                 make_feature(
-                    name="Spirit of Detroit", formatted="Spirit of Detroit, Detroit, MI"
+                    name="SFMOMA", city="San Francisco", formatted="SFMOMA, SF"
                 ),
-                make_feature(name="DTE"),  # same place again
-                # Another city is a separate group.
                 make_feature(
-                    name="Henry Ford Museum",
-                    city="Dearborn",
-                    formatted="Henry Ford Museum, Dearborn, MI",
+                    name="SFMOMA", city="San Francisco", formatted="SFMOMA, SF"
+                ),  # same place again
+                # A nearby city found by the same search stays in the same file.
+                make_feature(
+                    name="Swede's Beach",
+                    city="Sausalito",
+                    formatted="Swede's Beach, Sausalito",
                 ),
             ]
         )
     )
+    detroit_rows = transformer.transform(make_payload([make_feature(name="DTE")]))
 
-    tables = CityGrouper().group({"extract_date=2026-10-09": rows})
+    tables = DestinationGrouper().group({sf: sf_rows, detroit: detroit_rows})
 
-    detroit = ("extract_date=2026-10-09", "Detroit")
-    dearborn = ("extract_date=2026-10-09", "Dearborn")
-    assert sorted(tables) == [dearborn, detroit]
-    assert tables[detroit].schema == ActivitiesTransformer.SCHEMA
-    assert "county" not in tables[detroit].column_names
-    assert tables[detroit].column("name").to_pylist() == ["DTE", "Spirit of Detroit"]
-    assert tables[dearborn].column("name").to_pylist() == ["Henry Ford Museum"]
+    assert sorted(tables) == [detroit, sf]
+    assert tables[sf].schema == ActivitiesTransformer.SCHEMA
+    assert "county" not in tables[sf].column_names
+    assert tables[sf].column("name").to_pylist() == ["SFMOMA", "Swede's Beach"]
+    assert tables[sf].column("city").to_pylist() == ["San Francisco", "Sausalito"]
+    assert tables[detroit].column("name").to_pylist() == ["DTE"]
 
 
 # TransformedKeyBuilder
-def test_key_builder_names_file_after_city_in_same_partition():
+def test_key_builder_names_file_after_destination_folder():
+    builder = TransformedKeyBuilder("destination_activities/", "activities/")
+    partition = builder.partition(
+        "destination_activities/extract_date=2026-10-16/"
+        "destination=san_francisco_united_states/places_1_a_page000.json"
+    )
+
+    assert partition == "extract_date=2026-10-16/destination=san_francisco_united_states"
+    assert builder.destination(partition) == "san_francisco_united_states"
+    assert builder.build(partition) == (
+        "activities/extract_date=2026-10-16/destination=san_francisco_united_states/"
+        "activities_san_francisco_united_states.parquet"
+    )
+
+
+def test_key_builder_uses_plain_name_without_destination_folder():
     builder = TransformedKeyBuilder("destination_activities/", "activities/")
     partition = builder.partition(f"destination_activities/{PAGE_0}")
 
     assert partition == "extract_date=2026-10-09"
+    assert builder.destination(partition) is None
     assert (
-        builder.build(partition, "San Francisco")
-        == "activities/extract_date=2026-10-09/activities_san_francisco.parquet"
-    )
-    assert (
-        builder.build(partition, "Winston-Salem")
-        == "activities/extract_date=2026-10-09/activities_winston_salem.parquet"
+        builder.build(partition)
+        == "activities/extract_date=2026-10-09/activities.parquet"
     )
 
 
@@ -340,7 +355,7 @@ def test_locator_errors_when_partition_has_no_places_pages():
 
 
 # TransformService
-def test_service_combines_pages_and_writes_one_parquet_per_city():
+def test_service_combines_pages_into_one_parquet_per_destination():
     s3 = FakeS3(
         objects={
             ("raw-bucket", PAGE_0): raw(
@@ -375,18 +390,11 @@ def test_service_combines_pages_and_writes_one_parquet_per_city():
     )
 
     assert result["status"] == "SUCCEEDED"
-    assert result["file_count"] == 2
+    assert result["file_count"] == 1
     assert result["row_count"] == 3
     puts = {p["Key"]: p for p in s3.puts}
-    assert set(puts) == {
-        "activities/extract_date=2026-10-09/activities_detroit.parquet",
-        "activities/extract_date=2026-10-09/activities_san_antonio.parquet",
-    }
-    wayne = read_parquet(
-        puts[
-            "activities/extract_date=2026-10-09/activities_detroit.parquet"
-        ]
-    )
+    assert set(puts) == {"activities/extract_date=2026-10-09/activities.parquet"}
+    wayne = read_parquet(puts["activities/extract_date=2026-10-09/activities.parquet"])
     assert wayne.column_names == [
         "search_city",
         "name",
@@ -398,9 +406,9 @@ def test_service_combines_pages_and_writes_one_parquet_per_city():
         "latitude",
         "categories",
     ]
-    assert set(wayne.column("city").to_pylist()) == {"Detroit"}
-    assert wayne.column("name").to_pylist() == ["DTE", "Spirit of Detroit"]
-    assert [w["city"] for w in result["written"]] == ["Detroit", "San Antonio"]
+    assert wayne.column("name").to_pylist() == ["DTE", "The Alamo", "Spirit of Detroit"]
+    assert wayne.column("city").to_pylist() == ["Detroit", "San Antonio", "Detroit"]
+    assert [w["destination"] for w in result["written"]] == [None]
     assert all(p["Bucket"] == "transformed-bucket" for p in s3.puts)
 
 
@@ -447,7 +455,7 @@ def test_service_reads_and_writes_same_bucket_separated_by_prefix():
         ),
         reader=S3RawReader(client=s3),
         transformer=ActivitiesTransformer(),
-        grouper=CityGrouper(),
+        grouper=DestinationGrouper(),
         key_builder=TransformedKeyBuilder(
             "raw/destination_activities/", "transformed/destination_activities/"
         ),
@@ -461,7 +469,7 @@ def test_service_reads_and_writes_same_bucket_separated_by_prefix():
         (
             "travel-bucket",
             "transformed/destination_activities/extract_date=2026-10-09/"
-            "activities_detroit.parquet",
+            "activities.parquet",
         )
     ]
 
@@ -487,11 +495,11 @@ def test_service_writes_search_city_column_in_per_destination_folders():
 
     puts = {p["Key"]: read_parquet(p) for p in s3.puts}
     assert sorted(puts) == [
-        "extract_date=2026-10-13/destination=ann_arbor_mi/activities_detroit.parquet",
-        "extract_date=2026-10-13/destination=detroit_mi/activities_detroit.parquet",
+        "extract_date=2026-10-13/destination=ann_arbor_mi/activities_ann_arbor_mi.parquet",
+        "extract_date=2026-10-13/destination=detroit_mi/activities_detroit_mi.parquet",
     ]
     assert puts[
-        "extract_date=2026-10-13/destination=detroit_mi/activities_detroit.parquet"
+        "extract_date=2026-10-13/destination=detroit_mi/activities_detroit_mi.parquet"
     ].column("search_city").to_pylist() == ["Detroit, MI"]
     assert result["row_count"] == 2
 
