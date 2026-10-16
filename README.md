@@ -14,7 +14,9 @@
 
 ## Overview
 
-An AWS data pipeline that finds the cheapest last-minute vacations for a solo traveler flying out of Phoenix. It pulls travel data from four sources (flights, hotels, destination activities and exchange rates), stores the raw data, transforms it and makes it queryable for dashboards.
+An AWS data pipeline that finds the cheapest last-minute vacations for a solo traveler flying out of Phoenix. It pulls travel data from four sources (flights, hotels, destination activities and exchange rates), stores the raw data, transforms it and loads it into a database where it can be queried by dashboards.
+
+Queryable datasets are grouped by region based on each destination's latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
 
 ### How it works
 
@@ -35,13 +37,14 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 ## Tech Stack
 
 - Amazon EventBridge
-- AWS Lambda (Python, with `pyarrow` for Parquet)
-- AWS Glue
 - AWS Step Functions
 - Amazon API Gateway
+- AWS Lambda
+- AWS Glue
+- AWS Glue Data Catalog
+- AWS Glue Data Quality
 - Amazon S3 (bronze and silver layer)
 - Amazon Aurora Serverless (gold layer)
-- AWS Glue Data Catalog
 - Amazon Athena
 - Amazon Quick Sight
 - GitHub Actions (CI/CD)
@@ -54,7 +57,7 @@ The pipeline follows the medallion architecture: data moves through 3 layers, ea
 | ---------- | ------------------------------------------------------------------------------------------------------ | ------- |
 | **Bronze** | Raw API responses, exactly as returned (one S3 bucket per source)                                      | JSON    |
 | **Silver** | Each source cleaned & standardized on its own (one S3 bucket per source + one combined S3 data bucket) | Parquet |
-| **Gold**   | All sources combined into one analytics-ready dataset (a single Aurora Serverless cluster)             | Parquet |
+| **Gold**   | Sources are grouped by region into four analytics-ready datasets (four Aurora Serverless clusters)     | Parquet |
 
 Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
@@ -136,21 +139,19 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 1. **EventBridge** runs a daily schedule that starts the Step Functions workflow, so the full ETL pipeline runs every day with no manual steps.
 2. **API Gateway** exposes REST endpoints to start the pipeline on demand (for example, to backfill or test).
 3. **Step Functions** orchestrates every step below.
-4. **Extract → Bronze.** The extract Lambdas call each API and write the raw JSON responses to the bronze S3 buckets.
+4. **Extract → Bronze** The extract Lambdas call each API and write the raw JSON responses to the bronze S3 buckets.
    - Exchange rates run on their own.
    - Airplane ticket rates, hotel room rates and destination activities run in a chain: the hotels Lambda searches the destinations from the flight deals, and the activities Lambda searches the destinations from the hotels.
-5. **Catalog.** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog, so the raw data can be discovered and queried before it is transformed.
-6. **Transform → Silver.** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans them (for example, filling missing values and standardizing types), and writes the result as Parquet to that source's silver bucket.
+5. **Transform → Silver** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans them (for example, filling missing values and standardizing types), and writes the result as Parquet to that source's silver bucket.
    - Exchange rates
    - Airplane ticket rates
    - Hotel room rates
    - Destination activities: also categorizes each destination by vacation type (adventure, beach, restaurant, etc.) based on the places and activities found there.
-
-   A final transform AWS Glue Script joins the four silver datasets (converting prices with the exchange rates) into one combined Parquet dataset.
-
-7. **Load → Gold.** A load Lambda reads the combined Parquet dataset from the S3 combined bucket and writes it into the gold layer, an Amazon Aurora Serverless cluster. This gives downstream analytics one curated, query-ready table of flight, hotel, destination activities and currency-converted price data for each travel location. Aurora Serverless scales capacity up and down with the daily load.
-8. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
-9. **Amazon Quick Sight** visualizes the results.
+6. **Catalog** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog, so the raw data can be discovered and queried before it is transformed.
+7. **Final Transform → Silver** A final AWS Glue script joins the four silver datasets into one combined Parquet dataset, converting all prices with the exchange rates. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog. The catalog already stores each table’s schema, S3 location and extract_date partitions, so the job works from that metadata to read only the partitions and columns it needs. This reduces the data scanned and processed, which lowers both run time and cost.
+8. **Load → Gold** A load Lambda reads the combined Parquet dataset from the S3 combined bucket and writes it into the gold layer. The gold layer consists of four Amazon Aurora Serverless clusters. Each cluster corresponds to a specific region and datasets are grouped by region based on each destinations latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
+9. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
+10. **Amazon Quick Sight** visualizes the results.
 
 ## Project Structure
 
@@ -265,24 +266,24 @@ The extraction Lambdas need three API keys. The keys are stored in AWS Secrets M
 
 The extraction, transformation and load Lambda functions use environment variables to reference the ARNs of the AWS S3 buckets and the Aurora cluster they read from and write to. These values are kept in a local .env file and set on each Lambda function's configuration in AWS, so account-specific resource identifiers aren't exposed.
 
-| ENV Type           | Used by                                                                                                                                                          | Environment variable                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_EXTRACT_EXCHANGE_RATES_ARN`                                    |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN`                             |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_EXTRACT_HOTEL_ROOM_RATES_ARN`                                  |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN`                            |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_TRANSFORM_EXCHANGE_RATES_ARN`                                  |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN`                           |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN`                                |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN`                          |
-| Glue job name      | `deploy-glue.yaml`                                                                                                                                                         | `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB` |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                                    | `AWS_LOAD_COMBINED_DATASET_AURORA_ARN`                              |
-| S3 BUCKET ARN      | `extract_exchange_rates`,<br>`transform_exchange_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`                                              | `AWS_EXCHANGE_RATES_S3_BUCKET`                                      |
-| S3 BUCKET ARN      | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates`,<br>`transform_combine_airplane_hotel_destination_datasets` | `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET`                               |
-| S3 BUCKET ARN      | `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`     | `AWS_HOTEL_ROOM_RATES_S3_BUCKET`                                    |
-| S3 BUCKET ARN      | `extract_destination_activities`,<br>`transform_destination_activities`,<br>`transform_combine_airplane_hotel_destination_datasets`                              | `AWS_DESTINATION_ACTIVITIES_S3_BUCKET`                              |
-| S3 BUCKET ARN      | `transform_combine_airplane_hotel_destination_datasets`,<br>`load_gold_layer`                                                                                    | `AWS_COMBINE_AIRPLANE_HOTEL_DESTINATION_TRANSFORMED_DATA_S3_BUCKET` |
-| AURORA CLUSTER ARN | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates` REVIEW                                                                                            | `AWS_GOLD_LAYER_AURORA_SERVERLESS_CLUSTER`                          |
+| ENV Type           | Used by                                                                                                                                                          | Environment variable                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_EXTRACT_EXCHANGE_RATES_ARN`                                     |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN`                              |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_EXTRACT_HOTEL_ROOM_RATES_ARN`                                   |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN`                             |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_TRANSFORM_EXCHANGE_RATES_ARN`                                   |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN`                            |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN`                                 |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN`                           |
+| Glue job name      | `deploy-glue.yaml`                                                                                                                                               | `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB` |
+| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_LOAD_COMBINED_DATASET_AURORA_ARN`                               |
+| S3 BUCKET ARN      | `extract_exchange_rates`,<br>`transform_exchange_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`                                              | `AWS_EXCHANGE_RATES_S3_BUCKET`                                       |
+| S3 BUCKET ARN      | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates`,<br>`transform_combine_airplane_hotel_destination_datasets` | `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET`                                |
+| S3 BUCKET ARN      | `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`     | `AWS_HOTEL_ROOM_RATES_S3_BUCKET`                                     |
+| S3 BUCKET ARN      | `extract_destination_activities`,<br>`transform_destination_activities`,<br>`transform_combine_airplane_hotel_destination_datasets`                              | `AWS_DESTINATION_ACTIVITIES_S3_BUCKET`                               |
+| S3 BUCKET ARN      | `transform_combine_airplane_hotel_destination_datasets`,<br>`load_gold_layer`                                                                                    | `AWS_COMBINE_AIRPLANE_HOTEL_DESTINATION_TRANSFORMED_DATA_S3_BUCKET`  |
+| AURORA CLUSTER ARN | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates` REVIEW                                                                                            | `AWS_GOLD_LAYER_AURORA_SERVERLESS_CLUSTER`                           |
 
 Each source keeps its raw (bronze) and transformed (silver) data in the same bucket, separated by folder prefixes set on each Lambda:
 
