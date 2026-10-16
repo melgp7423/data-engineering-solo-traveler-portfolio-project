@@ -2,7 +2,7 @@
 Lambda: read every raw Geoapify Places JSON page in one extract_date partition
 from S3, keep only complete activities and the fields the pipeline needs
 (including search_city, the hotel destination the extract searched around),
-group them by county and write one Parquet file per county back to S3.
+group them by city and write one Parquet file per city back to S3.
 Raw pages under destination=<slug>/ keep that folder, so the Parquet output is
 split per search city as well.
 
@@ -11,7 +11,7 @@ Classes and their one job:
     RawObjectLocator           -> work out which raw S3 objects to transform from the event
     S3RawReader                -> read the raw JSON from S3
     ActivitiesTransformer      -> raw payload -> list of clean activity rows
-    CountyGrouper              -> rows -> one pyarrow Table per county + state
+    CityGrouper                -> rows -> one pyarrow Table per city
     TransformedKeyBuilder      -> name the Parquet object
     S3ParquetWriter            -> serialize the Table to Parquet and write it to S3
     TransformService           -> orchestrate locate -> read -> transform -> group -> name -> store
@@ -191,7 +191,7 @@ class InvalidRawPayloadError(Exception):
 
 class ActivitiesTransformer:
 
-    STRING_FIELDS = ("name", "country_code", "state", "county", "city", "formatted")
+    STRING_FIELDS = ("name", "country_code", "state", "city", "formatted")
     COORDINATE_FIELDS = (("longitude", "lon"), ("latitude", "lat"))
 
     # Double quotes and slashes anywhere; single quotes only when they wrap a
@@ -207,7 +207,6 @@ class ActivitiesTransformer:
             pa.field("name", pa.string()),
             pa.field("country_code", pa.string()),
             pa.field("state", pa.string()),
-            pa.field("county", pa.string()),
             pa.field("city", pa.string()),
             pa.field("formatted", pa.string()),
             pa.field("longitude", pa.float64()),
@@ -271,19 +270,19 @@ class ActivitiesTransformer:
         return re.sub(r"\s+", " ", cls._NAME_JUNK.sub(" ", name)).strip()
 
 
-class CountyGrouper:
+class CityGrouper:
 
     def __init__(self, schema: pa.Schema = ActivitiesTransformer.SCHEMA):
         self._schema = schema
 
     def group(
         self, rows_by_partition: Dict[str, List[Dict[str, object]]]
-    ) -> Dict[Tuple[str, str, str], pa.Table]:
-        grouped: Dict[Tuple[str, str, str], List[Dict[str, object]]] = defaultdict(list)
+    ) -> Dict[Tuple[str, str], pa.Table]:
+        grouped: Dict[Tuple[str, str], List[Dict[str, object]]] = defaultdict(list)
         seen = set()
         for partition, rows in rows_by_partition.items():
             for row in rows:
-                group_key = (partition, row["county"], row["state"])
+                group_key = (partition, row["city"])
                 identity = (*group_key, row["name"], row["formatted"])
                 if identity in seen:
                     continue
@@ -311,10 +310,9 @@ class TransformedKeyBuilder:
         )
         return posixpath.dirname(relative)
 
-    def build(self, partition: str, county: str, state: str) -> str:
+    def build(self, partition: str, city: str) -> str:
         folder = f"{partition}/" if partition else ""
-        name = "-".join(self._slug(part) for part in (county, state))
-        return f"{self._transformed_prefix}{folder}activities-{name}.parquet"
+        return f"{self._transformed_prefix}{folder}activities_{self._slug(city)}.parquet"
 
     @staticmethod
     def _slug(part: str) -> str:
@@ -351,14 +349,14 @@ class TransformError(Exception):
 
 
 class TransformService:
-    """Coordinates locate -> read -> transform (per page) -> group by county -> name -> store."""
+    """Coordinates locate -> read -> transform (per page) -> group by city -> name -> store."""
 
     def __init__(
         self,
         locator: RawObjectLocator,
         reader: S3RawReader,
         transformer: ActivitiesTransformer,
-        grouper: CountyGrouper,
+        grouper: CityGrouper,
         key_builder: TransformedKeyBuilder,
         writer: S3ParquetWriter,
     ):
@@ -400,22 +398,18 @@ class TransformService:
             raise TransformError(f"No complete activities found in {read}")
 
         written = []
-        for (partition, county, state), table in tables.items():
-            key = self._writer.write(
-                self._key_builder.build(partition, county, state), table
-            )
+        for (partition, city), table in tables.items():
+            key = self._writer.write(self._key_builder.build(partition, city), table)
             logger.info(
-                "Wrote %d activities for %s, %s to s3://%s/%s",
+                "Wrote %d activities for %s to s3://%s/%s",
                 table.num_rows,
-                county,
-                state,
+                city,
                 self._writer.bucket,
                 key,
             )
             written.append(
                 {
-                    "county": county,
-                    "state": state,
+                    "city": city,
                     "key": key,
                     "row_count": table.num_rows,
                 }
@@ -440,7 +434,7 @@ def build_service(config: TransformConfig) -> TransformService:
         ),
         reader=S3RawReader(),
         transformer=ActivitiesTransformer(),
-        grouper=CountyGrouper(),
+        grouper=CityGrouper(),
         key_builder=TransformedKeyBuilder(config.raw_prefix, config.transformed_prefix),
         writer=S3ParquetWriter(config.aws_destination_activities_s3_bucket),
     )

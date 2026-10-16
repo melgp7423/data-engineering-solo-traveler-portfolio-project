@@ -16,7 +16,7 @@ except ImportError:
 
 from transformation.transform_destination_activities.handler import (
     ActivitiesTransformer,
-    CountyGrouper,
+    CityGrouper,
     InvalidRawPayloadError,
     RawObjectLocator,
     S3ParquetWriter,
@@ -38,7 +38,6 @@ def make_feature(**overrides):
         "country": "United States",
         "country_code": "us",
         "state": "Michigan",
-        "county": "Wayne County",
         "city": "Detroit",
         "postcode": "48226",
         "street": "3rd Avenue",
@@ -101,7 +100,7 @@ def build_service(s3, today=date(2026, 10, 9), transformed_prefix=""):
         locator=RawObjectLocator("raw-bucket", "", client=s3, today=lambda: today),
         reader=S3RawReader(client=s3),
         transformer=ActivitiesTransformer(),
-        grouper=CountyGrouper(),
+        grouper=CityGrouper(),
         key_builder=TransformedKeyBuilder("", transformed_prefix),
         writer=S3ParquetWriter("transformed-bucket", client=s3),
     )
@@ -125,7 +124,6 @@ def test_keeps_only_requested_fields_and_every_category():
             "name": "DTE",
             "country_code": "us",
             "state": "Michigan",
-            "county": "Wayne County",
             "city": "Detroit",
             "formatted": "DTE, 3rd Avenue, Detroit, MI 48226, United States of America",
             "longitude": -83.0576393,
@@ -142,7 +140,7 @@ def test_keeps_only_requested_fields_and_every_category():
 
 @pytest.mark.parametrize(
     "field",
-    ["name", "country_code", "state", "county", "city", "formatted", "categories"],
+    ["name", "country_code", "state", "city", "formatted", "categories"],
 )
 def test_drops_feature_missing_a_required_field(field):
     rows = ActivitiesTransformer().transform(
@@ -159,7 +157,6 @@ def test_drops_feature_missing_a_required_field(field):
         ("name", "   "),
         ("name", None),
         ("city", ""),
-        ("county", ""),
         ("state", None),
         ("country_code", None),
         ("formatted", ""),
@@ -242,7 +239,7 @@ def test_rejects_payload_without_features():
 
 
 # CityGrouper
-def test_groups_rows_by_county_one_row_per_activity_and_drops_duplicates():
+def test_groups_rows_by_city_one_row_per_activity_and_drops_duplicates():
     transformer = ActivitiesTransformer()
     rows = transformer.transform(
         make_payload(
@@ -252,65 +249,40 @@ def test_groups_rows_by_county_one_row_per_activity_and_drops_duplicates():
                     name="Spirit of Detroit", formatted="Spirit of Detroit, Detroit, MI"
                 ),
                 make_feature(name="DTE"),  # same place again
-                # Another city in the same county goes in the same group.
+                # Another city is a separate group.
                 make_feature(
                     name="Henry Ford Museum",
                     city="Dearborn",
                     formatted="Henry Ford Museum, Dearborn, MI",
                 ),
-                # Same county name in another state is a separate group.
-                make_feature(
-                    name="Wayne County Fair",
-                    state="Ohio",
-                    city="Wooster",
-                    formatted="Wayne County Fair, Wooster, OH",
-                ),
-                make_feature(
-                    name="The Alamo",
-                    state="Texas",
-                    county="Bexar County",
-                    city="San Antonio",
-                    formatted="The Alamo, San Antonio, TX",
-                ),
             ]
         )
     )
 
-    tables = CountyGrouper().group({"extract_date=2026-10-09": rows})
+    tables = CityGrouper().group({"extract_date=2026-10-09": rows})
 
-    wayne_mi = ("extract_date=2026-10-09", "Wayne County", "Michigan")
-    assert sorted(tables) == [
-        ("extract_date=2026-10-09", "Bexar County", "Texas"),
-        wayne_mi,
-        ("extract_date=2026-10-09", "Wayne County", "Ohio"),
-    ]
-    assert tables[wayne_mi].schema == ActivitiesTransformer.SCHEMA
-    assert tables[wayne_mi].column("name").to_pylist() == [
-        "DTE",
-        "Spirit of Detroit",
-        "Henry Ford Museum",
-    ]
-    assert tables[wayne_mi].column("city").to_pylist() == [
-        "Detroit",
-        "Detroit",
-        "Dearborn",
-    ]
-    assert tables[("extract_date=2026-10-09", "Wayne County", "Ohio")].num_rows == 1
+    detroit = ("extract_date=2026-10-09", "Detroit")
+    dearborn = ("extract_date=2026-10-09", "Dearborn")
+    assert sorted(tables) == [dearborn, detroit]
+    assert tables[detroit].schema == ActivitiesTransformer.SCHEMA
+    assert "county" not in tables[detroit].column_names
+    assert tables[detroit].column("name").to_pylist() == ["DTE", "Spirit of Detroit"]
+    assert tables[dearborn].column("name").to_pylist() == ["Henry Ford Museum"]
 
 
 # TransformedKeyBuilder
-def test_key_builder_names_file_county_state_in_same_partition():
+def test_key_builder_names_file_after_city_in_same_partition():
     builder = TransformedKeyBuilder("destination_activities/", "activities/")
     partition = builder.partition(f"destination_activities/{PAGE_0}")
 
     assert partition == "extract_date=2026-10-09"
     assert (
-        builder.build(partition, "Wayne County", "Michigan")
-        == "activities/extract_date=2026-10-09/activities-wayne_county-michigan.parquet"
+        builder.build(partition, "San Francisco")
+        == "activities/extract_date=2026-10-09/activities_san_francisco.parquet"
     )
     assert (
-        builder.build(partition, "Miami-Dade County", "Florida")
-        == "activities/extract_date=2026-10-09/activities-miami_dade_county-florida.parquet"
+        builder.build(partition, "Winston-Salem")
+        == "activities/extract_date=2026-10-09/activities_winston_salem.parquet"
     )
 
 
@@ -368,7 +340,7 @@ def test_locator_errors_when_partition_has_no_places_pages():
 
 
 # TransformService
-def test_service_combines_pages_and_writes_one_parquet_per_county():
+def test_service_combines_pages_and_writes_one_parquet_per_city():
     s3 = FakeS3(
         objects={
             ("raw-bucket", PAGE_0): raw(
@@ -379,7 +351,6 @@ def test_service_combines_pages_and_writes_one_parquet_per_county():
                         make_feature(
                             name="The Alamo",
                             state="Texas",
-                            county="Bexar County",
                             city="San Antonio",
                             formatted="The Alamo, San Antonio, TX",
                         ),
@@ -408,12 +379,12 @@ def test_service_combines_pages_and_writes_one_parquet_per_county():
     assert result["row_count"] == 3
     puts = {p["Key"]: p for p in s3.puts}
     assert set(puts) == {
-        "activities/extract_date=2026-10-09/activities-wayne_county-michigan.parquet",
-        "activities/extract_date=2026-10-09/activities-bexar_county-texas.parquet",
+        "activities/extract_date=2026-10-09/activities_detroit.parquet",
+        "activities/extract_date=2026-10-09/activities_san_antonio.parquet",
     }
     wayne = read_parquet(
         puts[
-            "activities/extract_date=2026-10-09/activities-wayne_county-michigan.parquet"
+            "activities/extract_date=2026-10-09/activities_detroit.parquet"
         ]
     )
     assert wayne.column_names == [
@@ -421,19 +392,15 @@ def test_service_combines_pages_and_writes_one_parquet_per_county():
         "name",
         "country_code",
         "state",
-        "county",
         "city",
         "formatted",
         "longitude",
         "latitude",
         "categories",
     ]
-    assert set(wayne.column("county").to_pylist()) == {"Wayne County"}
+    assert set(wayne.column("city").to_pylist()) == {"Detroit"}
     assert wayne.column("name").to_pylist() == ["DTE", "Spirit of Detroit"]
-    assert [(w["county"], w["state"]) for w in result["written"]] == [
-        ("Bexar County", "Texas"),
-        ("Wayne County", "Michigan"),
-    ]
+    assert [w["city"] for w in result["written"]] == ["Detroit", "San Antonio"]
     assert all(p["Bucket"] == "transformed-bucket" for p in s3.puts)
 
 
@@ -480,7 +447,7 @@ def test_service_reads_and_writes_same_bucket_separated_by_prefix():
         ),
         reader=S3RawReader(client=s3),
         transformer=ActivitiesTransformer(),
-        grouper=CountyGrouper(),
+        grouper=CityGrouper(),
         key_builder=TransformedKeyBuilder(
             "raw/destination_activities/", "transformed/destination_activities/"
         ),
@@ -494,7 +461,7 @@ def test_service_reads_and_writes_same_bucket_separated_by_prefix():
         (
             "travel-bucket",
             "transformed/destination_activities/extract_date=2026-10-09/"
-            "activities-wayne_county-michigan.parquet",
+            "activities_detroit.parquet",
         )
     ]
 
@@ -520,11 +487,11 @@ def test_service_writes_search_city_column_in_per_destination_folders():
 
     puts = {p["Key"]: read_parquet(p) for p in s3.puts}
     assert sorted(puts) == [
-        "extract_date=2026-10-13/destination=ann_arbor_mi/activities-wayne_county-michigan.parquet",
-        "extract_date=2026-10-13/destination=detroit_mi/activities-wayne_county-michigan.parquet",
+        "extract_date=2026-10-13/destination=ann_arbor_mi/activities_detroit.parquet",
+        "extract_date=2026-10-13/destination=detroit_mi/activities_detroit.parquet",
     ]
     assert puts[
-        "extract_date=2026-10-13/destination=detroit_mi/activities-wayne_county-michigan.parquet"
+        "extract_date=2026-10-13/destination=detroit_mi/activities_detroit.parquet"
     ].column("search_city").to_pylist() == ["Detroit, MI"]
     assert result["row_count"] == 2
 
