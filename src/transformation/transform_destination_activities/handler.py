@@ -37,6 +37,7 @@ import logging
 import os
 import posixpath
 import re
+import unicodedata
 import urllib.parse
 from collections import defaultdict
 from dataclasses import dataclass
@@ -201,6 +202,11 @@ class ActivitiesTransformer:
         r"[\"\u201c\u201d\u201e/\\]|(?<!\w)['\u2018\u2019`]|['\u2018\u2019`](?!\w)"
     )
 
+    # Placeholder names: "Untitled", "UNTITLED #3", "(untitled)", "Untitled_7",
+    # "Un-titled", "un titled". The separated form needs a word break before
+    # "un" so names like "Fun Titled Show" survive.
+    _UNTITLED = re.compile(r"untitled|\bun[\W_]+titled")
+
     SCHEMA = pa.schema(
         [
             pa.field("search_city", pa.string()),
@@ -245,7 +251,7 @@ class ActivitiesTransformer:
             row[field_name] = value.strip()
 
         row["name"] = self.clean_name(row["name"])
-        if not row["name"]:
+        if not row["name"] or self.is_untitled(row["name"]):
             return None
 
         # From properties.lon / properties.lat, not geometry.coordinates.
@@ -268,6 +274,11 @@ class ActivitiesTransformer:
     @classmethod
     def clean_name(cls, name: str) -> str:
         return re.sub(r"\s+", " ", cls._NAME_JUNK.sub(" ", name)).strip()
+
+    @classmethod
+    def is_untitled(cls, name: str) -> bool:
+        # NFKC + casefold so any casing or full-width letters still match.
+        return bool(cls._UNTITLED.search(unicodedata.normalize("NFKC", name).casefold()))
 
 
 class DestinationGrouper:

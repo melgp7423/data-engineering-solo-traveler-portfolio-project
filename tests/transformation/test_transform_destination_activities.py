@@ -225,6 +225,37 @@ def test_drops_feature_whose_name_is_only_quotes_and_slashes():
     assert rows == []
 
 
+@pytest.mark.parametrize(
+    "raw_name",
+    [
+        "Untitled",
+        "untitled",
+        "UNTITLED",
+        "Untitled #3",
+        "Untitled_7",
+        "(Untitled)",
+        '"Untitled"',
+        "Sculpture (untitled)",
+        "Mural: Untitled 2019",
+        "Un-titled",
+        "Un titled",
+        "UnTitled",
+        "\uff35\uff4e\uff54\uff49\uff54\uff4c\uff45\uff44",  # full-width "Untitled"
+    ],
+)
+def test_drops_feature_with_untitled_name(raw_name):
+    rows = ActivitiesTransformer().transform(make_payload([make_feature(name=raw_name)]))
+
+    assert rows == []
+
+
+@pytest.mark.parametrize("raw_name", ["Titled Gallery", "Fun Titled Show", "Untold Stories"])
+def test_keeps_names_that_only_resemble_untitled(raw_name):
+    rows = ActivitiesTransformer().transform(make_payload([make_feature(name=raw_name)]))
+
+    assert [r["name"] for r in rows] == [raw_name]
+
+
 def test_skips_features_without_properties():
     rows = ActivitiesTransformer().transform(
         make_payload([{"type": "Feature"}, "junk", make_feature()])
