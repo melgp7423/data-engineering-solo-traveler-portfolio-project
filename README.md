@@ -214,28 +214,28 @@ To deploy and run the pipeline in AWS, you also need:
 
 ### Local setup
 
-1. **Clone the repository.**
+1. **Clone the repository**
 
    ```bash
    git clone git@github.com:melgp7423/data-engineering-solo-traveler-portfolio-project.git
    cd data-engineering-solo-traveler-portfolio-project
    ```
 
-2. **Create and activate a virtual environment.**
+2. **Create and activate a virtual environment**
 
    ```bash
    python3.14 -m venv .venv
    source .venv/bin/activate
    ```
 
-3. **Install the dependencies.** Each Lambda has its own `requirements.txt`. Install `pytest` plus the requirements of every Lambda:
+3. **Install the dependencies** Each Lambda has its own `requirements.txt`. Install `pytest` plus the requirements of every Lambda:
 
    ```bash
    pip install pytest
    for req in src/*/*/requirements.txt; do pip install -r "$req"; done
    ```
 
-4. **Run the tests.** The tests import the Lambdas from `src/`, so set `PYTHONPATH`:
+4. **Run the tests** The tests import the Lambdas from `src/`, so set `PYTHONPATH`:
 
    ```bash
    PYTHONPATH=src pytest tests
@@ -344,9 +344,9 @@ The Lambda workflow only tests and redeploys the Lambdas whose code or tests cha
         AWS Lambda functions updated with new code
 ```
 
-1. **Detect changes.** [`dorny/paths-filter`](https://github.com/dorny/paths-filter) checks each Lambda's `src/` folder and its test file to build the list of Lambdas to run. Editing `deploy-lambda.yaml` itself marks every Lambda as changed. A manual run selects all of them.
-2. **Test (CI).** For each changed Lambda, a matrix job sets up Python 3.14, installs `pytest` and the Lambda's `requirements.txt`, then runs its test file in `tests/`. Lambdas that don't have a test file yet are skipped instead of failing.
-3. **Deploy (CD).** Runs only after the tests pass and never on pull requests. For each changed Lambda it:
+1. **Detect changes** [`dorny/paths-filter`](https://github.com/dorny/paths-filter) checks each Lambda's `src/` folder and its test file to build the list of Lambdas to run. Editing `deploy-lambda.yaml` itself marks every Lambda as changed. A manual run selects all of them.
+2. **Test (CI)** For each changed Lambda, a matrix job sets up Python 3.14, installs `pytest` and the Lambda's `requirements.txt`, then runs its test file in `tests/`. Lambdas that don't have a test file yet are skipped instead of failing.
+3. **Deploy (CD)** Runs only after the tests pass and never on pull requests. For each changed Lambda it:
    - Builds a `.zip` deployment package with the dependencies installed next to `handler.py`.
    - Signs in to AWS with OIDC by assuming the IAM role in the `AWS_DEPLOY_ROLE_ARN` secret.
    - Looks up the function's ARN from its repository secret, runs `aws lambda update-function-code` and waits until the update finishes.
@@ -395,8 +395,8 @@ Pushes and pull requests only trigger the workflow when they change the job's `s
         AWS Glue job runs the new script next time
 ```
 
-1. **Test (CI).** Sets up Python 3.11 (the version Glue 5.0 runs), installs `pytest` and the job's `requirements.txt`, then runs its test file in `tests/transformation/`. A missing or empty test file is skipped instead of failing.
-2. **Deploy (CD).** Runs only after the tests pass and never on pull requests. It:
+1. **Test (CI)** Sets up Python 3.11 (the version Glue 5.0 runs), installs `pytest` and the job's `requirements.txt`, then runs its test file in `tests/transformation/`. A missing or empty test file is skipped instead of failing.
+2. **Deploy (CD)** Runs only after the tests pass and never on pull requests. It:
    - Signs in to AWS with OIDC by assuming the IAM role in the `AWS_DEPLOY_ROLE_ARN` secret.
    - Reads the job name from the `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB` secret and runs `aws glue get-job` to find the S3 path the job runs its script from.
    - Saves a copy of the script under `history/<commit-sha>/` next to the live script, so a deploy can be rolled back.
