@@ -155,7 +155,11 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
     )
 
     def destination_city(col):
+        """'washington_d_c_united_states' -> 'washington'. The extract slug turns
+        every '.' into '_', so initials come through as 'd c'; rejoin them to 'dc'
+        so they line up with CITY_ALIASES and the hotel/flight city keys."""
         key = normalize(F.regexp_replace(F.lower(col), suffix_regex, ""))
+        key = F.regexp_replace(key, r"\b(\w) (?=\w\b)", "$1")
         return F.coalesce(alias_map[key], key)
 
     def destination_country(col):
@@ -539,91 +543,98 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
     )
 
 
-args = getResolvedOptions(sys.argv, ["JOB_NAME"])
-sc = SparkContext()
-glueContext = GlueContext(sc)
-spark = glueContext.spark_session
-job = Job(glueContext)
-job.init(args["JOB_NAME"], args)
+def main():
+    args = getResolvedOptions(sys.argv, ["JOB_NAME"])
+    sc = SparkContext()
+    glueContext = GlueContext(sc)
+    spark = glueContext.spark_session
+    job = Job(glueContext)
+    job.init(args["JOB_NAME"], args)
 
-HotelRoomRates_node1791925973881 = glueContext.create_dynamic_frame.from_catalog(
-    database="transformed-data-catalog",
-    table_name="hotel-room-rates-transformed",
-    transformation_ctx="HotelRoomRates_node1791925973881",
-)
+    HotelRoomRates_node1791925973881 = glueContext.create_dynamic_frame.from_catalog(
+        database="transformed-data-catalog",
+        table_name="hotel-room-rates-transformed",
+        transformation_ctx="HotelRoomRates_node1791925973881",
+    )
 
-ExchangeRatesCatalog_node1791925915942 = glueContext.create_dynamic_frame.from_catalog(
-    database="transformed-data-catalog",
-    table_name="exchange-rates-transformed",
-    transformation_ctx="ExchangeRatesCatalog_node1791925915942",
-)
+    ExchangeRatesCatalog_node1791925915942 = (
+        glueContext.create_dynamic_frame.from_catalog(
+            database="transformed-data-catalog",
+            table_name="exchange-rates-transformed",
+            transformation_ctx="ExchangeRatesCatalog_node1791925915942",
+        )
+    )
 
-AirplaneTicketRates_node1791925972897 = glueContext.create_dynamic_frame.from_catalog(
-    database="transformed-data-catalog",
-    table_name="airplane-ticket-rates-transformed",
-    transformation_ctx="AirplaneTicketRates_node1791925972897",
-)
+    AirplaneTicketRates_node1791925972897 = (
+        glueContext.create_dynamic_frame.from_catalog(
+            database="transformed-data-catalog",
+            table_name="airplane-ticket-rates-transformed",
+            transformation_ctx="AirplaneTicketRates_node1791925972897",
+        )
+    )
 
+    def read_with_catalog_schema(database, table_name):
+        """Read a parquet catalog table using the Data Catalog's column list instead of
+        the schema Glue infers from the files, so columns missing from older partitions
+        (e.g. longitude/latitude) come through as nulls rather than disappearing."""
+        table = boto3.client("glue").get_table(DatabaseName=database, Name=table_name)[
+            "Table"
+        ]
+        columns = table["StorageDescriptor"]["Columns"] + table.get("PartitionKeys", [])
+        schema = ", ".join(f"`{c['Name']}` {c['Type']}" for c in columns)
+        location = table["StorageDescriptor"]["Location"].rstrip("/") + "/"
+        print(f"[{table_name}] reading {location} with catalog schema: {schema}")
+        df = spark.read.schema(schema).option("basePath", location).parquet(location)
+        return DynamicFrame.fromDF(df, glueContext, table_name)
 
-def read_with_catalog_schema(database, table_name):
-    """Read a parquet catalog table using the Data Catalog's column list instead of
-    the schema Glue infers from the files, so columns missing from older partitions
-    (e.g. longitude/latitude) come through as nulls rather than disappearing."""
-    table = boto3.client("glue").get_table(DatabaseName=database, Name=table_name)[
-        "Table"
-    ]
-    columns = table["StorageDescriptor"]["Columns"] + table.get("PartitionKeys", [])
-    schema = ", ".join(f"`{c['Name']}` {c['Type']}" for c in columns)
-    location = table["StorageDescriptor"]["Location"].rstrip("/") + "/"
-    print(f"[{table_name}] reading {location} with catalog schema: {schema}")
-    df = spark.read.schema(schema).option("basePath", location).parquet(location)
-    return DynamicFrame.fromDF(df, glueContext, table_name)
+    DestinationActivities_node1791925974614 = read_with_catalog_schema(
+        "transformed-data-catalog", "destination-activities-transformed"
+    )
 
-
-DestinationActivities_node1791925974614 = read_with_catalog_schema(
-    "transformed-data-catalog", "destination-activities-transformed"
-)
-
-CombineDatasets_node1791924321376 = MyTransform(
-    glueContext,
-    DynamicFrameCollection(
-        {
-            "ExchangeRatesCatalog_node1791925915942": ExchangeRatesCatalog_node1791925915942,
-            "AirplaneTicketRates_node1791925972897": AirplaneTicketRates_node1791925972897,
-            "HotelRoomRates_node1791925973881": HotelRoomRates_node1791925973881,
-            "DestinationActivities_node1791925974614": DestinationActivities_node1791925974614,
-        },
+    CombineDatasets_node1791924321376 = MyTransform(
         glueContext,
-    ),
-)
+        DynamicFrameCollection(
+            {
+                "ExchangeRatesCatalog_node1791925915942": ExchangeRatesCatalog_node1791925915942,
+                "AirplaneTicketRates_node1791925972897": AirplaneTicketRates_node1791925972897,
+                "HotelRoomRates_node1791925973881": HotelRoomRates_node1791925973881,
+                "DestinationActivities_node1791925974614": DestinationActivities_node1791925974614,
+            },
+            glueContext,
+        ),
+    )
 
-SelectCombined_node = SelectFromCollection.apply(
-    dfc=CombineDatasets_node1791924321376,
-    key="combined",
-    transformation_ctx="SelectCombined_node",
-)
+    SelectCombined_node = SelectFromCollection.apply(
+        dfc=CombineDatasets_node1791924321376,
+        key="combined",
+        transformation_ctx="SelectCombined_node",
+    )
 
-OUTPUT_PATH = "s3://combine-datasets-transformation-075996947402-us-east-2-an/"
-if "--OUTPUT_PATH" in sys.argv:
-    OUTPUT_PATH = getResolvedOptions(sys.argv, ["OUTPUT_PATH"])["OUTPUT_PATH"]
+    OUTPUT_PATH = "s3://combine-datasets-transformation-075996947402-us-east-2-an/"
+    if "--OUTPUT_PATH" in sys.argv:
+        OUTPUT_PATH = getResolvedOptions(sys.argv, ["OUTPUT_PATH"])["OUTPUT_PATH"]
 
-combined_date = datetime.now(ZoneInfo("America/Phoenix")).strftime("%Y-%m-%d")
-print(f"Writing output to {OUTPUT_PATH}combined_date={combined_date}/")
+    combined_date = datetime.now(ZoneInfo("America/Phoenix")).strftime("%Y-%m-%d")
+    print(f"Writing output to {OUTPUT_PATH}combined_date={combined_date}/")
 
-output_df = (
-    SelectCombined_node.toDF()
-    .withColumn("combined_date", F.lit(combined_date))
-    .coalesce(1)
-)
+    output_df = (
+        SelectCombined_node.toDF()
+        .withColumn("combined_date", F.lit(combined_date))
+        .coalesce(1)
+    )
 
-# Script generated for node Write to S3
-glueContext.write_dynamic_frame.from_options(
-    frame=DynamicFrame.fromDF(output_df, glueContext, "output_df"),
-    connection_type="s3",
-    format="glueparquet",
-    connection_options={"path": OUTPUT_PATH, "partitionKeys": ["combined_date"]},
-    format_options={"compression": "snappy"},
-    transformation_ctx="WriteToS3_node",
-)
+    # Script generated for node Write to S3
+    glueContext.write_dynamic_frame.from_options(
+        frame=DynamicFrame.fromDF(output_df, glueContext, "output_df"),
+        connection_type="s3",
+        format="glueparquet",
+        connection_options={"path": OUTPUT_PATH, "partitionKeys": ["combined_date"]},
+        format_options={"compression": "snappy"},
+        transformation_ctx="WriteToS3_node",
+    )
 
-job.commit()
+    job.commit()
+
+
+if __name__ == "__main__":
+    main()
