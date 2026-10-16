@@ -7,12 +7,8 @@ from awsglue.job import Job
 from pyspark.sql import functions as F
 from pyspark.context import SparkContext
 
-# Job parameters naming the Glue Data Catalog database and table the combine
-# transform writes to (partitioned by combined_date)
 CATALOG_PARAMS = ["CATALOG_DATABASE", "CATALOG_TABLE"]
 
-# Gold layer: one Aurora Serverless cluster per region. Each region's Glue
-# connection name comes from the job parameter mapped to it here.
 CLUSTER_PARAMS = {
     "us_ca_west": "US_CA_WEST_CLUSTER_CONNECTION",
     "us_ca_east": "US_CA_EAST_CLUSTER_CONNECTION",
@@ -21,11 +17,9 @@ CLUSTER_PARAMS = {
 }
 TARGET_TABLE = "destinations"
 
-# US / CA split on the 100th meridian west, MX split on the Tropic of Cancer
 WEST_EAST_LONGITUDE = -100.0
 TROPIC_OF_CANCER_LATITUDE = 23.4362
 
-# Aurora has no array/struct columns, so these go in as JSON strings
 JSON_COLUMNS = ["activity_examples", "activity_categories"]
 
 
@@ -66,9 +60,7 @@ def to_jdbc_rows(df):
 
 
 def read_latest_partition(spark, database, table_name, combined_date=None):
-    """Read one combined_date partition using only Glue Data Catalog metadata: the
-    table's column list for the schema and the partition's S3 location, so nothing
-    is inferred from the parquet files. Defaults to the most recent partition."""
+
     glue = boto3.client("glue")
     table = glue.get_table(DatabaseName=database, Name=table_name)["Table"]
     columns = table["StorageDescriptor"]["Columns"]
@@ -100,7 +92,6 @@ def read_latest_partition(spark, database, table_name, combined_date=None):
 
 
 def write_cluster(glueContext, df, connection):
-    """Replace TARGET_TABLE on one cluster with this run's destinations."""
     conf = glueContext.extract_jdbc_conf(connection)
     url = conf.get("fullUrl") or conf["url"]
     (
@@ -109,7 +100,7 @@ def write_cluster(glueContext, df, connection):
         .option("dbtable", TARGET_TABLE)
         .option("user", conf["user"])
         .option("password", conf["password"])
-        .option("truncate", "true")  # keep the table definition, replace the rows
+        .option("truncate", "true")
         .mode("overwrite")
         .save()
     )
@@ -150,7 +141,6 @@ def main():
         rows = to_jdbc_rows(routed.filter(F.col("cluster") == cluster).drop("cluster"))
         count = rows.count()
         if count == 0:
-            # Leave the cluster's table as it is rather than truncating it to nothing
             print(f"[{cluster}] no destinations, skipping write")
             continue
         print(
