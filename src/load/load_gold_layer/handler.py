@@ -108,7 +108,7 @@ def write_cluster(glueContext, df, connection):
 def main():
     args = getResolvedOptions(
         sys.argv,
-        ["Load Datasets Gold Layer", *CATALOG_PARAMS, *CLUSTER_PARAMS.values()],
+        ["JOB_NAME", *CATALOG_PARAMS, *CLUSTER_PARAMS.values()],
     )
     connections = {cluster: args[param] for cluster, param in CLUSTER_PARAMS.items()}
     print(f"Cluster connections: {connections}")
@@ -116,7 +116,7 @@ def main():
     glueContext = GlueContext(sc)
     spark = glueContext.spark_session
     job = Job(glueContext)
-    job.init(args["Load Datasets Gold Layer"], args)
+    job.init(args["JOB_NAME"], args)
 
     combined = read_latest_partition(
         spark,
