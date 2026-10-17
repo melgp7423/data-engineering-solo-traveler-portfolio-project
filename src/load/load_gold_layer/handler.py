@@ -53,7 +53,6 @@ def route_destinations(df):
 
 
 def to_jdbc_rows(df):
-    """Flatten the array/struct columns so the rows can be written over JDBC."""
     for c in JSON_COLUMNS:
         df = df.withColumn(c, F.to_json(c))
     return df
@@ -108,7 +107,8 @@ def write_cluster(glueContext, df, connection):
 
 def main():
     args = getResolvedOptions(
-        sys.argv, ["JOB_NAME", *CATALOG_PARAMS, *CLUSTER_PARAMS.values()]
+        sys.argv,
+        ["Load Datasets Gold Layer", *CATALOG_PARAMS, *CLUSTER_PARAMS.values()],
     )
     connections = {cluster: args[param] for cluster, param in CLUSTER_PARAMS.items()}
     print(f"Cluster connections: {connections}")
@@ -116,7 +116,7 @@ def main():
     glueContext = GlueContext(sc)
     spark = glueContext.spark_session
     job = Job(glueContext)
-    job.init(args["JOB_NAME"], args)
+    job.init(args["Load Datasets Gold Layer"], args)
 
     combined = read_latest_partition(
         spark,
