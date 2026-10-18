@@ -10,7 +10,6 @@
 - [Getting Started](#getting-started)
 - [Setup](#setup)
 - [CI/CD Pipeline](#cicd-pipeline)
-- [Usage](#usage)
 
 ## Overview
 
@@ -22,7 +21,7 @@ Queryable datasets are grouped by region based on each destination's latitude an
 
 - **Flights:** Starting from Phoenix, the pipeline finds the 30 cheapest flight destinations in the US, Canada and Mexico.
 - **Hotels:** For each destination extracted in the raw flight data, it pulls room rates for 18 hotel properties.
-- **Destination activities:** For each destination, the Geoapify API finds activities within a set radius of the city, such as artwork, museums, viewpoints, cultural entertainment, heritage sites, outdoor activities, beaches, national parks and skiing. These activities are used to categorize each destination by vacation type, so travelers can see at a glance whether it's an adventure, beach, restaurant (food) or other kind of trip.
+- **Destination activities:** For each destination, the Geoapify API finds activities within a set radius of the city, such as artwork, museums, viewpoints, cultural entertainment, heritage sites, outdoor activities, beaches, national parks and skiing.
 - **Exchange rates:** The pipeline pulls the latest USD → Mexican peso and USD → Canadian dollar rates on the day the data is extracted. Rates are only attached to international destinations.
 
 ### What you get
@@ -40,7 +39,7 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 - AWS Step Functions
 - Amazon API Gateway
 - AWS Lambda
-- AWS Glue
+- AWS Glue PySpark Scripts
 - AWS Glue Data Catalog
 - AWS Glue Data Quality
 - Amazon S3 (bronze and silver layer)
@@ -51,7 +50,8 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 
 ## Architecture
 
-The pipeline follows the medallion architecture: data moves through 3 layers, each one cleaner and more query-ready than the last.
+The pipeline follows the medallion architecture.
+Data moves through 3 layers, each one cleaner and more query-ready than the last.
 
 | Layer      | What it holds                                                                                          | Format  |
 | ---------- | ------------------------------------------------------------------------------------------------------ | ------- |
@@ -63,20 +63,20 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
 ![Data Engineering Architecture Diagram](docs/images/Data_Engineering_Diagram.svg)
 
-1. **EventBridge** runs a daily schedule that starts the Step Functions workflow, so the full ETL pipeline runs every day with no manual steps.
-2. **API Gateway** exposes REST endpoints to start the pipeline on demand (for example, to backfill or test).
-3. **Step Functions** orchestrates every step below.
-4. **Extract → Bronze** The extract Lambdas call each API and write the raw JSON responses to the bronze S3 buckets.
+1. **EventBridge** runs a daily schedule that starts the Step Functions workflow allowing the full ETL pipeline to run every morning.
+2. **API Gateway** exposes REST API endpoints to start the pipeline.
+3. **Step Functions** orchestrates the ETL workflow.
+4. **Extract → Bronze** The extract Lambdas call each API and write the raw JSON responses to the bronze S3 buckets. The lambda functions are coordinated to run in parallel.
    - Exchange rates run on their own.
-   - Airplane ticket rates, hotel room rates and destination activities run in a chain: the hotels Lambda searches the destinations from the flight deals, and the activities Lambda searches the destinations from the hotels.
-5. **Transform → Silver** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans them (for example, filling missing values and standardizing types), and writes the result as Parquet to that source's silver bucket.
+   - Airplane ticket rates, hotel room rates and destination activities run in a chain. The hotels Lambda searches the destinations from the flight deals data and the destination activities Lambda searches the destinations data from the hotels.
+5. **Transform → Silver** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans all the data and writes the result as Parquet to that source's silver bucket.
    - Exchange rates
    - Airplane ticket rates
    - Hotel room rates
-   - Destination activities: also categorizes each destination by vacation type (adventure, beach, restaurant, etc.) based on the places and activities found there.
+   - Destination activities
 6. **Catalog** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog, so the raw data can be discovered and queried before it is transformed.
-7. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset, converting all prices with the exchange rates. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog. The catalog already stores each table’s schema, S3 location and extract_date partitions, so the job works from that metadata to read only the partitions and columns it needs. This reduces the data scanned and processed, which lowers both run time and cost.
-8. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
+7. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog.
+8. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket within the silver layer, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
 9. **Load → Gold** A load Glue job script reads the combined Parquet dataset metadata from the Glue Data Catalog and writes it into the gold layer. The gold layer consists of four Amazon Aurora Serverless clusters. Each cluster corresponds to a specific region and datasets are grouped by region based on each destinations latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
 10. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
 11. **Amazon Quick Sight** visualizes the results.
@@ -88,6 +88,9 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 │   └── workflows/
 │       ├── deploy-lambda.yaml                               # CI/CD for the Lambdas
 │       └── deploy-glue.yaml                                 # CI/CD for the Glue job
+├── docs/
+│   └── images/
+│       └── Data_Engineering_Diagram.svg                     # README.md Architecture Diagram
 ├── src/
 │   ├── extract/                                             # API → bronze (raw JSON)
 │   │   ├── extract_exchange_rates/
@@ -95,7 +98,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 │   │   ├── extract_hotel_room_rates/
 │   │   └── extract_destination_activities/
 │   ├── transformation/                                      # bronze → silver (Parquet)
-│   │   ├── transform_exchange_rates/                        # (planned)
+│   │   ├── transform_exchange_rates/
 │   │   ├── transform_airplane_ticket_rates/
 │   │   ├── transform_hotel_room_rates/
 │   │   ├── transform_destination_activities/
@@ -126,13 +129,13 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 To run the code and tests on your computer:
 
 - [Git](https://git-scm.com/downloads)
-- [Python 3.14](https://www.python.org/downloads/) (the same version the CI/CD pipeline uses) and `pip`
+- [Python 3.14](https://www.python.org/downloads/) and `pip`
 
 To deploy and run the pipeline in AWS, you also need:
 
 - An AWS account with permission to create Lambda, S3, Step Functions, EventBridge, API Gateway, Glue, Athena, Aurora Serverless, Secrets Manager and IAM resources.
 - API keys listed in [setup](#setup).
-- A GitHub fork of this repository, so GitHub Actions can deploy the Lambdas.
+- A GitHub fork of this repository.
 
 ### Local setup
 
@@ -218,7 +221,7 @@ Each source keeps its raw (bronze) and transformed (silver) data in the same buc
 
 ## CI/CD Pipeline
 
-The Lambda functions and the Glue job are tested and deployed automatically with GitHub Actions, through two separate workflows. Each one only runs for its own code, so a change to a Lambda never redeploys the Glue job, and the other way around.
+The Lambda functions and the Glue job are tested and deployed automatically with GitHub Actions through two separate workflows.
 
 | Workflow                                                     | Deploys                                                              | Packaged as                   |
 | ------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- |
@@ -226,31 +229,17 @@ The Lambda functions and the Glue job are tested and deployed automatically with
 | [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `transform_combine_airplane_hotel_destination_datasets` Glue job | Python script uploaded to S3  |
 | [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `load_gold_layer` Glue job                                       | Python script uploaded to S3  |
 
-Both workflows sign in to AWS with OIDC by assuming the IAM role in the `AWS_DEPLOY_ROLE_ARN` secret.
-
 ### Lambda pipeline (`deploy-lambda.yaml`)
 
 The Lambda workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
 
 #### Adding a new Lambda to the pipeline
 
-1. Create the folder in `src/<stage>/<lambda_folder_name>` and create the files `handler.py`, `requirements.txt` and `__init__.py`. The lambdas folder name must start with `extract_`,`transform_` or `load_`, since the workflow uses the prefix to find the folder.
+1. Create the folder in `src/<stage>/<lambda_folder_name>` and create the files `handler.py`, `requirements.txt` and `__init__.py`. The lambdas folder name must start with `extract_` or `transform_` since the workflow uses the prefix to find the folder.
 2. Add its test file at `tests/<stage>/test_<lambda_name>.py`.
 3. Add a repository secret with the function's ARN, for example `AWS_TRANSFORM_EXCHANGE_RATES_ARN`.
 4. In `deploy-lambda.yaml`, add the Lambda to `FUNCTION_NAMES`, to the `paths-filter` filters and to the manual-run list in the `detect-changes` job.
 
 ### Glue job pipeline (`deploy-glue.yaml`)
 
-The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs instead of a Lambda, so it has its own workflow. The Glue job itself (IAM role, workers, Glue version and job parameters) is created and configured in AWS.
-
-## Usage
-
-### Running the pipeline
-
-The pipeline runs automatically. An EventBridge cron job starts the Step Functions workflow every morning at 7:00 AM. Each run extracts the latest exchange rates, flights, hotel room rates and destination activities, then transforms and loads them through the bronze, silver and gold layers. No manual steps are needed.
-
-To run the pipeline outside the daily schedule (for example, to backfill or test), start it through the API Gateway endpoint.
-
-### Viewing the results
-
-When a run finishes, the new data is in the gold bucket. Athena queries it through the Glue Data Catalog and Amazon QuickSight shows the results in dashboards. Open the QuickSight dashboard to see the latest data.
+The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs so it has its own workflow.
