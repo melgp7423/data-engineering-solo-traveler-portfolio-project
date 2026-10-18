@@ -5,6 +5,7 @@ from awsglue.utils import getResolvedOptions
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from pyspark.sql import functions as F
+from pyspark.sql.types import BooleanType
 from pyspark.context import SparkContext
 
 CATALOG_PARAMS = ["CATALOG_DATABASE", "CATALOG_TABLE"]
@@ -92,14 +93,26 @@ def read_latest_partition(spark, database, table_name, combined_date=None):
     )
 
 
+def boolean_column_types(df):
+    return ", ".join(
+        f"{f.name} BOOLEAN" for f in df.schema.fields if isinstance(f.dataType, BooleanType)
+    )
+
+
 def write_cluster(df, endpoint, driver, database, user):
+    # Spark doesn't recognise the jdbc:aws-dsql URL as Postgres, so it falls back
+    # to its generic dialect: overwrite drops and recreates the table (truncate is
+    # ignored) and booleans default to BIT, which DSQL doesn't support.
+    writer = df.write.format("jdbc")
+    bool_types = boolean_column_types(df)
+    if bool_types:
+        writer = writer.option("createTableColumnTypes", bool_types)
     (
-        df.write.format("jdbc")
+        writer
         .option("url", f"jdbc:aws-dsql:postgresql://{endpoint}/{database}")
         .option("driver", driver)
         .option("dbtable", TARGET_TABLE)
         .option("user", user)
-        .option("truncate", "true")
         .mode("overwrite")
         .save()
     )
