@@ -10,12 +10,14 @@ from pyspark.context import SparkContext
 CATALOG_PARAMS = ["CATALOG_DATABASE", "CATALOG_TABLE"]
 
 CLUSTER_PARAMS = {
-    "us_ca_west": "US_CA_WEST_CLUSTER_CONNECTION",
-    "us_ca_east": "US_CA_EAST_CLUSTER_CONNECTION",
-    "mx_north": "MX_NORTH_CLUSTER_CONNECTION",
-    "mx_south": "MX_SOUTH_CLUSTER_CONNECTION",
+    "us_ca_west": "US_CA_WEST_CLUSTER_ENDPOINT",
+    "us_ca_east": "US_CA_EAST_CLUSTER_ENDPOINT",
+    "mx_north": "MX_NORTH_CLUSTER_ENDPOINT",
+    "mx_south": "MX_SOUTH_CLUSTER_ENDPOINT",
 }
 TARGET_TABLE = "destinations"
+
+DSQL_PARAMS = ["DSQL_DRIVER", "DSQL_DATABASE", "DSQL_USER"]
 
 WEST_EAST_LONGITUDE = -100.0
 TROPIC_OF_CANCER_LATITUDE = 23.4362
@@ -90,15 +92,13 @@ def read_latest_partition(spark, database, table_name, combined_date=None):
     )
 
 
-def write_cluster(glueContext, df, connection):
-    conf = glueContext.extract_jdbc_conf(connection)
-    url = conf.get("fullUrl") or conf["url"]
+def write_cluster(df, endpoint, driver, database, user):
     (
         df.write.format("jdbc")
-        .option("url", url)
+        .option("url", f"jdbc:aws-dsql:postgresql://{endpoint}/{database}")
+        .option("driver", driver)
         .option("dbtable", TARGET_TABLE)
-        .option("user", conf["user"])
-        .option("password", conf["password"])
+        .option("user", user)
         .option("truncate", "true")
         .mode("overwrite")
         .save()
@@ -108,10 +108,10 @@ def write_cluster(glueContext, df, connection):
 def main():
     args = getResolvedOptions(
         sys.argv,
-        ["JOB_NAME", *CATALOG_PARAMS, *CLUSTER_PARAMS.values()],
+        ["JOB_NAME", *CATALOG_PARAMS, *DSQL_PARAMS, *CLUSTER_PARAMS.values()],
     )
-    connections = {cluster: args[param] for cluster, param in CLUSTER_PARAMS.items()}
-    print(f"Cluster connections: {connections}")
+    endpoints = {cluster: args[param] for cluster, param in CLUSTER_PARAMS.items()}
+    print(f"Cluster endpoints: {endpoints}")
     sc = SparkContext()
     glueContext = GlueContext(sc)
     spark = glueContext.spark_session
@@ -137,16 +137,22 @@ def main():
             f"{sorted((r.city, r.country, r.longitude, r.latitude) for r in unrouted)}"
         )
 
-    for cluster, connection in connections.items():
+    for cluster, endpoint in endpoints.items():
         rows = to_jdbc_rows(routed.filter(F.col("cluster") == cluster).drop("cluster"))
         count = rows.count()
         if count == 0:
             print(f"[{cluster}] no destinations, skipping write")
             continue
         print(
-            f"[{cluster}] writing {count} destinations to {TARGET_TABLE} via {connection}"
+            f"[{cluster}] writing {count} destinations to {TARGET_TABLE} via {endpoint}"
         )
-        write_cluster(glueContext, rows, connection)
+        write_cluster(
+            rows,
+            endpoint,
+            args["DSQL_DRIVER"],
+            args["DSQL_DATABASE"],
+            args["DSQL_USER"],
+        )
 
     job.commit()
 
