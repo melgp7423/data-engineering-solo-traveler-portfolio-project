@@ -110,12 +110,6 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 └── README.md
 ```
 
-Each Lambda folder contains:
-
-- `handler.py`: the Lambda code (entry point `lambda_handler`)
-- `requirements.txt`: its Python dependencies
-- `__init__.py`
-
 ## Data Sources
 
 | Data                    | Source                                                                                  |
