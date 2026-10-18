@@ -233,13 +233,6 @@ The Lambda functions and the Glue job are tested and deployed automatically with
 
 The Lambda workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
 
-#### Adding a new Lambda to the pipeline
-
-1. Create the folder in `src/<stage>/<lambda_folder_name>` and create the files `handler.py`, `requirements.txt` and `__init__.py`. The lambdas folder name must start with `extract_` or `transform_` since the workflow uses the prefix to find the folder.
-2. Add its test file at `tests/<stage>/test_<lambda_name>.py`.
-3. Add a repository secret with the function's ARN, for example `AWS_TRANSFORM_EXCHANGE_RATES_ARN`.
-4. In `deploy-lambda.yaml`, add the Lambda to `FUNCTION_NAMES`, to the `paths-filter` filters and to the manual-run list in the `detect-changes` job.
-
 ### Glue job pipeline (`deploy-glue.yaml`)
 
 The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs so it has its own workflow.
