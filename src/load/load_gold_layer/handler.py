@@ -95,7 +95,9 @@ def read_latest_partition(spark, database, table_name, combined_date=None):
 
 def boolean_column_types(df):
     return ", ".join(
-        f"{f.name} BOOLEAN" for f in df.schema.fields if isinstance(f.dataType, BooleanType)
+        f"{f.name} BOOLEAN"
+        for f in df.schema.fields
+        if isinstance(f.dataType, BooleanType)
     )
 
 
@@ -108,11 +110,11 @@ def write_cluster(df, endpoint, driver, database, user):
     if bool_types:
         writer = writer.option("createTableColumnTypes", bool_types)
     (
-        writer
-        .option("url", f"jdbc:aws-dsql:postgresql://{endpoint}/{database}")
+        writer.option("url", f"jdbc:aws-dsql:postgresql://{endpoint}/{database}")
         .option("driver", driver)
         .option("dbtable", TARGET_TABLE)
         .option("user", user)
+        .option("isolationLevel", "REPEATABLE_READ")
         .mode("overwrite")
         .save()
     )
