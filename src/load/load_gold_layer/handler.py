@@ -102,9 +102,6 @@ def boolean_column_types(df):
 
 
 def write_cluster(df, endpoint, driver, database, user):
-    # Spark doesn't recognise the jdbc:aws-dsql URL as Postgres, so it falls back
-    # to its generic dialect: overwrite drops and recreates the table (truncate is
-    # ignored) and booleans default to BIT, which DSQL doesn't support.
     writer = df.write.format("jdbc")
     bool_types = boolean_column_types(df)
     if bool_types:
