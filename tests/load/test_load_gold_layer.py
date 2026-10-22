@@ -1,6 +1,7 @@
 import json
 import sys
 import types
+from datetime import date
 
 import pytest
 
@@ -42,6 +43,8 @@ SCHEMA = (
     "activity_examples array<struct<name:string,category:string,longitude:double,latitude:double>>, "
     "activity_categories array<string>"
 )
+
+TODAY = date.today().isoformat()
 
 
 @pytest.fixture(scope="module")
@@ -253,7 +256,11 @@ def partition(value, location):
 @pytest.fixture
 def combined_partitions(spark, tmp_path):
     locations = {}
-    for value, city in [("2026-10-04", "old"), ("2026-10-05", "new")]:
+    for value, city in [
+        ("2024-10-04", "old"),
+        (TODAY, "today"),
+        ("9999-12-31", "future"),
+    ]:
         location = tmp_path / f"combined_date={value}"
         spark.createDataFrame(
             [(city, "US", "dropped")], "city string, country string, extra string"
@@ -270,7 +277,7 @@ def use_glue(monkeypatch, glue):
     monkeypatch.setattr(handler.boto3, "client", lambda name: glue)
 
 
-def test_read_latest_partition_reads_newest_partition_with_catalog_schema(
+def test_read_latest_partition_defaults_to_todays_partition_with_catalog_schema(
     spark, monkeypatch, combined_partitions
 ):
     glue = catalog(combined_partitions)
@@ -279,19 +286,35 @@ def test_read_latest_partition_reads_newest_partition_with_catalog_schema(
     df = read_latest_partition(spark, "travel_db", "combined")
 
     assert df.columns == ["city", "country", "combined_date"]
-    assert [tuple(r) for r in df.collect()] == [("new", "US", "2026-10-05")]
+    assert [tuple(r) for r in df.collect()] == [("today", "US", TODAY)]
     assert glue.calls == [
         ("get_table", "travel_db", "combined"),
         ("get_partitions", "travel_db", "combined"),
     ]
 
 
+def test_read_latest_partition_reads_newest_partition_when_date_is_none(
+    spark, monkeypatch, combined_partitions
+):
+    use_glue(monkeypatch, catalog(combined_partitions))
+    df = read_latest_partition(spark, "travel_db", "combined", None)
+    assert [tuple(r) for r in df.collect()] == [("future", "US", "9999-12-31")]
+
+
 def test_read_latest_partition_reads_requested_date(
     spark, monkeypatch, combined_partitions
 ):
     use_glue(monkeypatch, catalog(combined_partitions))
-    df = read_latest_partition(spark, "travel_db", "combined", "2026-10-04")
-    assert [tuple(r) for r in df.collect()] == [("old", "US", "2026-10-04")]
+    df = read_latest_partition(spark, "travel_db", "combined", "2024-10-04")
+    assert [tuple(r) for r in df.collect()] == [("old", "US", "2024-10-04")]
+
+
+def test_read_latest_partition_rejects_missing_todays_partition(spark, monkeypatch):
+    use_glue(
+        monkeypatch, FakeGlue(COLUMNS, [partition("2024-10-04", "s3://bucket/old")])
+    )
+    with pytest.raises(ValueError, match=f"No combined_date={TODAY} partition"):
+        read_latest_partition(spark, "travel_db", "combined")
 
 
 def test_read_latest_partition_rejects_unknown_date(
