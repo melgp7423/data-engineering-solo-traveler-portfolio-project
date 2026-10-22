@@ -346,4 +346,4 @@ def lambda_handler(event, context):
     global _service
     if _service is None:
         _service = build_service(TransformConfig.from_env())
-    return _service.run(event)
+    return _service.run(event or {})
