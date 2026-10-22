@@ -62,7 +62,9 @@ def to_jdbc_rows(df):
     return df
 
 
-def read_latest_partition(spark, database, table_name, combined_date=date.today()):
+def read_latest_partition(
+    spark, database, table_name, combined_date=date.today().isoformat()
+):
 
     glue = boto3.client("glue")
     table = glue.get_table(DatabaseName=database, Name=table_name)["Table"]
