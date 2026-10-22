@@ -1,21 +1,24 @@
 import json
 import sys
 import types
+import io
 import urllib.error
+import urllib.parse
 from datetime import date
 
 import pytest
 
-# boto3 ships with the Lambda runtime but isn't in requirements.txt, so CI may
-# not have it. Every test injects fakes, so a stub module is enough.
 try:
-    import boto3  # noqa: F401
+    import boto3
 except ImportError:
     sys.modules["boto3"] = types.SimpleNamespace(client=lambda *_a, **_k: None)
 
+from extract.extract_destination_activities import handler
 from extract.extract_destination_activities.handler import (
     AreaPolygonBuilder,
+    BoundingBox,
     CityGeocoder,
+    GeoapifyClient,
     DestinationLocator,
     DestinationsNotFoundError,
     GeocodedDestination,
@@ -23,17 +26,18 @@ from extract.extract_destination_activities.handler import (
     ExtractError,
     ExtractService,
     PlacesQueryBuilder,
+    QueryParamKeyAuthenticator,
     RawObjectKeyBuilder,
     ResponseValidator,
+    SecretProvider,
     ExtractConfig,
+    S3RawWriter,
+    build_locator,
+    build_service,
 )
 
 
-# Fakes
 class FakeGeoapify:
-    """Records calls and replays queued responses per (method, url).
-    Geocoding GETs are answered per city from `cities` ({name: (lat, lon)});
-    a city missing from it gets an empty result. A queued Exception is raised."""
 
     def __init__(self, responses=None, cities=None):
         self._responses = {k: list(v) for k, v in (responses or {}).items()}
@@ -116,7 +120,6 @@ def config(**overrides):
     return ExtractConfig(**values)
 
 
-# DestinationLocator
 def test_locator_uses_hotel_lambda_output_and_dedupes():
     event = {
         "written": [
@@ -153,7 +156,6 @@ def test_locator_raises_when_nothing_found():
         locator.locate({"written": []})
 
 
-# CityGeocoder
 def make_geocoder(fake, sleeps=None):
     sleep = sleeps.append if sleeps is not None else (lambda _s: None)
     return CityGeocoder(
@@ -251,7 +253,6 @@ def test_geocoder_reports_city_as_not_found_after_retries_run_out():
     assert result.not_found == ["X"]
 
 
-# AreaPolygonBuilder
 def test_area_is_one_multipolygon_with_a_closed_square_per_city():
     area = AreaPolygonBuilder(10000).build(
         [
@@ -284,7 +285,6 @@ def test_overlapping_cities_are_merged_into_one_polygon():
     assert len(area["coordinates"]) == 2
 
 
-# ExtractionService
 def make_service(fake, writer, cfg):
     validator = ResponseValidator()
     return ExtractService(
@@ -446,7 +446,6 @@ def test_config_rejects_geocode_concurrency_out_of_range():
 def test_config_from_env_uses_synchronous_geocoding_defaults(monkeypatch):
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
-    # The old batch URL variable must not be picked up any more.
     monkeypatch.setenv(
         "GEOCODE_URL", "https://api.geoapify.com/v1/batch/geocode/search"
     )
@@ -513,3 +512,250 @@ def test_config_from_env_raw_prefix_defaults_to_empty(monkeypatch):
     cfg = ExtractConfig.from_env()
 
     assert cfg.raw_prefix == ""
+
+
+class FakeResponse:
+    def __init__(self, body, status=200):
+        self._body = body
+        self.status = status
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+
+class FakeUrlopen:
+
+    def __init__(self, response):
+        self._response = response
+        self.requests = []
+        self.timeouts = []
+
+    def __call__(self, request, timeout):
+        self.requests.append(request)
+        self.timeouts.append(timeout)
+        if isinstance(self._response, Exception):
+            raise self._response
+        return self._response
+
+
+def split_url(request):
+    url = urllib.parse.urlsplit(request.full_url)
+    return f"{url.scheme}://{url.netloc}{url.path}", urllib.parse.parse_qs(url.query)
+
+
+class FakeSecrets:
+    def __init__(self, secret_string):
+        self._secret_string = secret_string
+        self.calls = 0
+
+    def get_secret_value(self, SecretId):
+        self.calls += 1
+        return {"SecretString": self._secret_string}
+
+
+def geoapify_client(timeout=5):
+    secrets = SecretProvider("id", client=FakeSecrets("abc123"))
+    return GeoapifyClient(QueryParamKeyAuthenticator(secrets), timeout)
+
+
+@pytest.mark.parametrize(
+    "secret_string",
+    [
+        "abc123",
+        " abc123 ",
+        '{"GEOAPIFY_KEY": " abc123 "}',
+        '{"api_key": "abc123", "x": 1}',
+    ],
+)
+def test_secret_provider_extracts_key(secret_string):
+    assert SecretProvider("id", client=FakeSecrets(secret_string)).get() == "abc123"
+
+
+@pytest.mark.parametrize("secret_string", ["{not json", '{"a": "1", "b": "2"}'])
+def test_secret_provider_returns_raw_string_when_no_key_found(secret_string):
+    assert (
+        SecretProvider("id", client=FakeSecrets(secret_string)).get() == secret_string
+    )
+
+
+def test_secret_provider_caches_value():
+    client = FakeSecrets("abc123")
+    provider = SecretProvider("id", client=client)
+    provider.get()
+    provider.get()
+    assert client.calls == 1
+
+
+def test_authenticator_adds_geoapify_api_key_without_mutating_input():
+    secrets = SecretProvider("id", client=FakeSecrets("abc123"))
+    params = {"text": "Cancun"}
+    assert QueryParamKeyAuthenticator(secrets).apply(params) == {
+        "text": "Cancun",
+        "apiKey": "abc123",
+    }
+    assert params == {"text": "Cancun"}
+
+
+def test_client_get_sends_params_and_api_key(monkeypatch):
+    urlopen = FakeUrlopen(FakeResponse(b'{"results": []}'))
+    monkeypatch.setattr(handler.urllib.request, "urlopen", urlopen)
+
+    response = geoapify_client(timeout=7).get("https://geo/search", {"text": "Cancun"})
+
+    request = urlopen.requests[0]
+    assert response == HttpResponse(200, b'{"results": []}')
+    assert split_url(request) == (
+        "https://geo/search",
+        {"text": ["Cancun"], "apiKey": ["abc123"]},
+    )
+    assert request.get_method() == "GET"
+    assert request.data is None
+    assert request.get_header("Content-type") is None
+    assert urlopen.timeouts == [7]
+
+
+def test_client_post_json_sends_json_body(monkeypatch):
+    urlopen = FakeUrlopen(FakeResponse(b"{}", status=201))
+    monkeypatch.setattr(handler.urllib.request, "urlopen", urlopen)
+
+    payload = {"categories": ["beach"], "filter": {"type": "Polygon"}}
+    response = geoapify_client().post_json("https://geo/places", payload)
+
+    request = urlopen.requests[0]
+    assert response.status == 201
+    assert split_url(request) == ("https://geo/places", {"apiKey": ["abc123"]})
+    assert request.get_method() == "POST"
+    assert json.loads(request.data) == payload
+    assert request.get_header("Content-type") == "application/json"
+
+
+def test_client_reraises_http_errors(monkeypatch):
+    error = urllib.error.HTTPError(
+        "https://geo/search", 401, "Unauthorized", {}, io.BytesIO(b"bad key")
+    )
+    monkeypatch.setattr(handler.urllib.request, "urlopen", FakeUrlopen(error))
+    with pytest.raises(urllib.error.HTTPError):
+        geoapify_client().get("https://geo/search", {})
+
+
+def test_client_reraises_connection_errors(monkeypatch):
+    monkeypatch.setattr(
+        handler.urllib.request, "urlopen", FakeUrlopen(urllib.error.URLError("down"))
+    )
+    with pytest.raises(urllib.error.URLError):
+        geoapify_client().post_json("https://geo/places", {})
+
+
+@pytest.mark.parametrize(
+    "other, overlaps",
+    [
+        (BoundingBox(1, 1, 3, 3), True),
+        # Touching edges count as overlapping.
+        (BoundingBox(2, 0, 4, 2), True),
+        (BoundingBox(-1, -1, 3, 3), True),
+        (BoundingBox(2.1, 0, 4, 2), False),
+        (BoundingBox(0, 2.1, 2, 4), False),
+        (BoundingBox(-3, -3, -0.1, -0.1), False),
+    ],
+)
+def test_bounding_box_overlaps(other, overlaps):
+    box = BoundingBox(0, 0, 2, 2)
+    assert box.overlaps(other) is overlaps
+    assert other.overlaps(box) is overlaps
+
+
+def test_bounding_box_union_covers_both_boxes():
+    assert BoundingBox(0, 0, 2, 2).union(BoundingBox(1, -1, 3, 1)) == BoundingBox(
+        0, -1, 3, 2
+    )
+
+
+def test_bounding_box_ring_is_closed_counter_clockwise():
+    assert BoundingBox(0, 0, 2, 1).ring() == [[0, 0], [2, 0], [2, 1], [0, 1], [0, 0]]
+
+
+def test_s3_raw_writer_puts_json_object_and_returns_key():
+    puts = []
+    s3 = types.SimpleNamespace(put_object=lambda **kwargs: puts.append(kwargs))
+    writer = S3RawWriter("raw-bucket", client=s3)
+
+    assert writer.write("k.json", b"{}") == "k.json"
+    assert writer.bucket == "raw-bucket"
+    assert puts == [
+        {
+            "Bucket": "raw-bucket",
+            "Key": "k.json",
+            "Body": b"{}",
+            "ContentType": "application/json",
+        }
+    ]
+
+
+def test_build_locator_reads_from_hotel_room_rates_bucket(monkeypatch):
+    monkeypatch.setattr(handler.boto3, "client", lambda *_a, **_k: None)
+    locator = build_locator(config(aws_hotel_room_rates_s3_bucket="hotels-bucket"))
+    assert locator._bucket == "hotels-bucket"
+    assert locator._prefix == "hotel_room_rates"
+
+
+def test_build_service_writes_to_destination_activities_bucket(monkeypatch):
+    monkeypatch.setattr(handler.boto3, "client", lambda *_a, **_k: None)
+    service = build_service(config(aws_destination_activities_s3_bucket="activities"))
+    assert service._writer.bucket == "activities"
+
+
+def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
+    built = []
+
+    class StubLocator:
+        def locate(self, event):
+            return ["located", event["written"][0]["destination"]]
+
+    class StubService:
+        def run(self, destinations, overrides):
+            return {"destinations": destinations, "overrides": overrides}
+
+    def fake_build_service(cfg):
+        built.append(cfg)
+        return StubService()
+
+    monkeypatch.setattr(handler, "_service", None)
+    monkeypatch.setattr(handler, "_locator", None)
+    monkeypatch.setattr(handler, "build_locator", lambda cfg: StubLocator())
+    monkeypatch.setattr(handler, "build_service", fake_build_service)
+
+    event = {
+        "written": [{"destination": "Cancun, Mexico"}],
+        "query_params": {"categories": ["beach"]},
+    }
+    first = handler.lambda_handler(event, None)
+    handler.lambda_handler(event, None)
+
+    assert first == {
+        "destinations": ["located", "Cancun, Mexico"],
+        "overrides": {"categories": ["beach"]},
+    }
+    assert len(built) == 1
+    assert built[0].aws_destination_activities_s3_bucket == "raw-bucket"
+
+
+def test_lambda_handler_defaults_overrides_to_empty(monkeypatch):
+    class StubLocator:
+        def locate(self, event):
+            return []
+
+    class StubService:
+        def run(self, destinations, overrides):
+            return overrides
+
+    monkeypatch.setattr(handler, "_locator", StubLocator())
+    monkeypatch.setattr(handler, "_service", StubService())
+    assert handler.lambda_handler(None, None) == {}

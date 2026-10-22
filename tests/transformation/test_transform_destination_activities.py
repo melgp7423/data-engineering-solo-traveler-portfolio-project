@@ -7,13 +7,12 @@ from datetime import date
 import pyarrow.parquet as pq
 import pytest
 
-# boto3 ships with the Lambda runtime but isn't in requirements.txt, so CI may
-# not have it. Every test injects fakes, so a stub module is enough.
 try:
-    import boto3  # noqa: F401
+    import boto3
 except ImportError:
     sys.modules["boto3"] = types.SimpleNamespace(client=lambda *_a, **_k: None)
 
+from transformation.transform_destination_activities import handler
 from transformation.transform_destination_activities.handler import (
     ActivitiesTransformer,
     DestinationGrouper,
@@ -67,7 +66,6 @@ def make_payload(features):
     return {"type": "FeatureCollection", "features": features}
 
 
-# Fakes
 class FakePaginator:
     def __init__(self, pages):
         self.pages = pages
@@ -114,7 +112,6 @@ def raw(payload):
     return json.dumps(payload).encode()
 
 
-# ActivitiesTransformer
 def test_keeps_only_requested_fields_and_every_category():
     rows = ActivitiesTransformer().transform(make_payload([make_feature()]))
 
@@ -244,14 +241,20 @@ def test_drops_feature_whose_name_is_only_quotes_and_slashes():
     ],
 )
 def test_drops_feature_with_untitled_name(raw_name):
-    rows = ActivitiesTransformer().transform(make_payload([make_feature(name=raw_name)]))
+    rows = ActivitiesTransformer().transform(
+        make_payload([make_feature(name=raw_name)])
+    )
 
     assert rows == []
 
 
-@pytest.mark.parametrize("raw_name", ["Titled Gallery", "Fun Titled Show", "Untold Stories"])
+@pytest.mark.parametrize(
+    "raw_name", ["Titled Gallery", "Fun Titled Show", "Untold Stories"]
+)
 def test_keeps_names_that_only_resemble_untitled(raw_name):
-    rows = ActivitiesTransformer().transform(make_payload([make_feature(name=raw_name)]))
+    rows = ActivitiesTransformer().transform(
+        make_payload([make_feature(name=raw_name)])
+    )
 
     assert [r["name"] for r in rows] == [raw_name]
 
@@ -269,7 +272,6 @@ def test_rejects_payload_without_features():
         ActivitiesTransformer().transform({"type": "FeatureCollection"})
 
 
-# DestinationGrouper
 def test_groups_every_city_in_a_destination_into_one_table_and_drops_duplicates():
     sf = "extract_date=2026-10-16/destination=san_francisco_united_states"
     detroit = "extract_date=2026-10-16/destination=detroit_mi"
@@ -282,8 +284,7 @@ def test_groups_every_city_in_a_destination_into_one_table_and_drops_duplicates(
                 ),
                 make_feature(
                     name="SFMOMA", city="San Francisco", formatted="SFMOMA, SF"
-                ),  # same place again
-                # A nearby city found by the same search stays in the same file.
+                ),
                 make_feature(
                     name="Swede's Beach",
                     city="Sausalito",
@@ -304,7 +305,6 @@ def test_groups_every_city_in_a_destination_into_one_table_and_drops_duplicates(
     assert tables[detroit].column("name").to_pylist() == ["DTE"]
 
 
-# TransformedKeyBuilder
 def test_key_builder_names_file_after_destination_folder():
     builder = TransformedKeyBuilder("destination_activities/", "activities/")
     partition = builder.partition(
@@ -312,7 +312,9 @@ def test_key_builder_names_file_after_destination_folder():
         "destination=san_francisco_united_states/places_1_a_page000.json"
     )
 
-    assert partition == "extract_date=2026-10-16/destination=san_francisco_united_states"
+    assert (
+        partition == "extract_date=2026-10-16/destination=san_francisco_united_states"
+    )
     assert builder.destination(partition) == "san_francisco_united_states"
     assert builder.build(partition) == (
         "activities/extract_date=2026-10-16/destination=san_francisco_united_states/"
@@ -332,7 +334,6 @@ def test_key_builder_uses_plain_name_without_destination_folder():
     )
 
 
-# RawObjectLocator
 def test_locator_uses_places_keys_from_extract_output_and_skips_geocode():
     locator = RawObjectLocator("raw-bucket")
     event = {
@@ -385,7 +386,6 @@ def test_locator_errors_when_partition_has_no_places_pages():
         locator.locate({})
 
 
-# TransformService
 def test_service_combines_pages_into_one_parquet_per_destination():
     s3 = FakeS3(
         objects={
@@ -393,7 +393,7 @@ def test_service_combines_pages_into_one_parquet_per_destination():
                 make_payload(
                     [
                         make_feature(name="DTE"),
-                        make_feature(name=...),  # no name -> dropped
+                        make_feature(name=...),
                         make_feature(
                             name="The Alamo",
                             state="Texas",
@@ -515,7 +515,6 @@ def test_service_writes_search_city_column_in_per_destination_folders():
             ("raw-bucket", detroit): raw(
                 make_payload([make_feature(search_city="Detroit, MI")])
             ),
-            # Same place found from a second search city is kept for both.
             ("raw-bucket", ann_arbor): raw(
                 make_payload([make_feature(search_city="Ann Arbor, MI")])
             ),
@@ -535,7 +534,6 @@ def test_service_writes_search_city_column_in_per_destination_folders():
     assert result["row_count"] == 2
 
 
-# TransformConfig
 def test_config_requires_bucket(monkeypatch):
     monkeypatch.delenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", raising=False)
 
@@ -584,3 +582,49 @@ def test_config_prefixes_default_to_empty(monkeypatch):
 
     assert config.raw_prefix == ""
     assert config.transformed_prefix == ""
+
+
+def test_build_service_wires_config(monkeypatch):
+    monkeypatch.setattr(handler.boto3, "client", lambda *_a, **_k: None)
+    service = handler.build_service(
+        TransformConfig(
+            aws_destination_activities_s3_bucket="travel-bucket",
+            raw_prefix="raw/",
+            transformed_prefix="transformed/",
+        )
+    )
+    assert service._locator._default_bucket == "travel-bucket"
+    assert service._writer.bucket == "travel-bucket"
+
+
+def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "travel-bucket")
+    built = []
+
+    class StubService:
+        def run(self, event):
+            return {"event": event}
+
+    def fake_build_service(cfg):
+        built.append(cfg)
+        return StubService()
+
+    monkeypatch.setattr(handler, "_service", None)
+    monkeypatch.setattr(handler, "build_service", fake_build_service)
+
+    event = {"bucket": "travel-bucket", "key": "k.json"}
+    first = handler.lambda_handler(event, None)
+    handler.lambda_handler(event, None)
+
+    assert first == {"event": event}
+    assert len(built) == 1
+    assert built[0].aws_destination_activities_s3_bucket == "travel-bucket"
+
+
+def test_lambda_handler_treats_missing_event_as_empty(monkeypatch):
+    class StubService:
+        def run(self, event):
+            return event
+
+    monkeypatch.setattr(handler, "_service", StubService())
+    assert handler.lambda_handler(None, None) == {}

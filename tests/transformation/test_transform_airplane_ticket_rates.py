@@ -7,13 +7,12 @@ from datetime import date, datetime, timezone
 import pyarrow.parquet as pq
 import pytest
 
-# boto3 ships with the Lambda runtime but isn't in requirements.txt, so CI may
-# not have it. Every test injects fakes, so a stub module is enough.
 try:
-    import boto3  # noqa: F401
+    import boto3
 except ImportError:
     sys.modules["boto3"] = types.SimpleNamespace(client=lambda *_a, **_k: None)
 
+from transformation.transform_airplane_ticket_rates import handler
 from transformation.transform_airplane_ticket_rates.handler import (
     DealsTransformer,
     InvalidRawPayloadError,
@@ -25,7 +24,6 @@ from transformation.transform_airplane_ticket_rates.handler import (
     TransformService,
 )
 
-# Raw JSON and transformed Parquet live in one bucket, split by prefix
 BUCKET = "travel-app-bucket"
 RAW_PREFIX = "raw/"
 TRANSFORMED_PREFIX = "transformed/"
@@ -78,7 +76,6 @@ def make_payload(deals=None):
     }
 
 
-# Fakes
 class FakeS3:
     def __init__(self, objects=None):
         self.objects = dict(objects or {})
@@ -101,7 +98,6 @@ def build_service(s3):
     )
 
 
-# DealsTransformer
 def test_keeps_all_metadata_and_only_requested_deal_fields():
     table = DealsTransformer().transform(make_payload())
 
@@ -203,7 +199,6 @@ def test_invalid_payload_raises(payload):
         DealsTransformer().transform(payload)
 
 
-# RawObjectLocator / TransformedKeyBuilder
 def test_locator_reads_step_functions_event():
     locator = RawObjectLocator(BUCKET, RAW_PREFIX)
     assert locator.locate({"bucket": "b", "key": "k.json"}) == ("b", "k.json")
@@ -304,9 +299,7 @@ def test_locator_decodes_s3_notification_key():
             {
                 "s3": {
                     "bucket": {"name": "b"},
-                    "object": {
-                        "key": "raw/extract_date%3D2026-10-07/a+b.json"
-                    },
+                    "object": {"key": "raw/extract_date%3D2026-10-07/a+b.json"},
                 }
             }
         ]
@@ -335,7 +328,6 @@ def test_key_builder_accepts_prefixes_without_trailing_slash():
     assert builder.build(RAW_KEY) == TRANSFORMED_KEY
 
 
-# TransformService end to end
 def test_service_reads_json_and_writes_parquet():
     s3 = FakeS3({(BUCKET, RAW_KEY): json.dumps(make_payload()).encode()})
 
@@ -373,3 +365,49 @@ def test_config_requires_bucket(monkeypatch):
 
     with pytest.raises(ValueError, match="AWS_AIRPLANE_TICKET_RATES_S3_BUCKET"):
         TransformConfig.from_env()
+
+
+def test_build_service_wires_config(monkeypatch):
+    monkeypatch.setattr(handler.boto3, "client", lambda *_a, **_k: None)
+    service = handler.build_service(
+        TransformConfig(
+            aws_airplane_ticket_rates_s3_bucket="travel-bucket",
+            raw_prefix="raw/",
+            transformed_prefix="transformed/",
+        )
+    )
+    assert service._locator._default_bucket == "travel-bucket"
+    assert service._writer.bucket == "travel-bucket"
+
+
+def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
+    monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", "travel-bucket")
+    built = []
+
+    class StubService:
+        def run(self, event):
+            return {"event": event}
+
+    def fake_build_service(cfg):
+        built.append(cfg)
+        return StubService()
+
+    monkeypatch.setattr(handler, "_service", None)
+    monkeypatch.setattr(handler, "build_service", fake_build_service)
+
+    event = {"bucket": "travel-bucket", "key": "k.json"}
+    first = handler.lambda_handler(event, None)
+    handler.lambda_handler(event, None)
+
+    assert first == {"event": event}
+    assert len(built) == 1
+    assert built[0].aws_airplane_ticket_rates_s3_bucket == "travel-bucket"
+
+
+def test_lambda_handler_treats_missing_event_as_empty(monkeypatch):
+    class StubService:
+        def run(self, event):
+            return event
+
+    monkeypatch.setattr(handler, "_service", StubService())
+    assert handler.lambda_handler(None, None) == {}

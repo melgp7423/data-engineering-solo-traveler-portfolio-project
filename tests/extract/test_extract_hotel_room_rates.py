@@ -1,15 +1,15 @@
+import io
 import json
 import sys
 import types
 import urllib.error
+import urllib.parse
 from datetime import date, datetime, timezone
 
 import pytest
 
-# boto3 ships with the Lambda runtime but isn't in requirements.txt, so CI may
-# not have it. Every test injects fakes, so a stub module is enough.
 try:
-    import boto3  # noqa: F401
+    import boto3
 except ImportError:
     sys.modules["boto3"] = types.SimpleNamespace(client=lambda *_a, **_k: None)
 
@@ -26,9 +26,12 @@ from extract.extract_hotel_room_rates.handler import (
     FlightDealsNotFoundError,
     FlightDealsReader,
     HotelQueryBuilder,
+    HotelSearchClient,
+    QueryParamKeyAuthenticator,
     RawObjectKeyBuilder,
     ResponseValidator,
     S3Location,
+    S3RawWriter,
     SecretProvider,
     StayDates,
     StayDatesCalculator,
@@ -36,7 +39,6 @@ from extract.extract_hotel_room_rates.handler import (
     build_service,
 )
 
-# Raw JSON lives in one bucket, split by prefix
 BUCKET = "travel-bucket"
 FLIGHT_DEALS_PREFIX = "raw/airplane_ticket_rates/"
 RAW_PREFIX = "raw/hotel_room_rates/"
@@ -44,9 +46,7 @@ TODAY = date(2026, 10, 5)
 STAY = StayDates(check_in=date(2026, 10, 12), check_out=date(2026, 10, 19))
 
 
-# Fakes
 class FakeS3:
-    """In-memory S3: objects maps key -> (body, last_modified)."""
 
     def __init__(self, objects=None):
         self._objects = objects or {}
@@ -99,7 +99,6 @@ class FakeReader:
 
 
 class FakeHotelClient:
-    """Replays a body (or raises) per `q`; records every params dict."""
 
     def __init__(self, responses):
         self._responses = responses
@@ -177,7 +176,6 @@ def make_service(payload, responses, writer=None, cfg=None):
     return service, client
 
 
-# ExtractConfig
 def test_config_accepts_valid_settings():
     config().validate()
 
@@ -278,13 +276,11 @@ def test_config_from_env_ignores_old_raw_data_bucket_variables(monkeypatch):
     assert "AWS_HOTEL_ROOM_RATES_S3_BUCKET" in str(err.value)
 
 
-# StayDatesCalculator
 def test_stay_dates_are_offsets_from_today():
     stay = StayDatesCalculator(7, 14, today=lambda: TODAY).calculate()
     assert stay == STAY
 
 
-# FlightDealsLocator
 def test_locator_uses_event_bucket_and_key():
     locator = FlightDealsLocator(BUCKET, FLIGHT_DEALS_PREFIX, client=FakeS3())
     event = {"bucket": "other-bucket", "key": "raw/airplane_ticket_rates/x.json"}
@@ -302,9 +298,18 @@ def test_locator_picks_newest_json_in_todays_partition():
     partition = "raw/airplane_ticket_rates/extract_date=2026-10-05/"
     s3 = FakeS3(
         {
-            f"{partition}old.json": (b"{}", datetime(2026, 10, 5, 1, tzinfo=timezone.utc)),
-            f"{partition}new.json": (b"{}", datetime(2026, 10, 5, 9, tzinfo=timezone.utc)),
-            f"{partition}newest.txt": (b"", datetime(2026, 10, 5, 12, tzinfo=timezone.utc)),
+            f"{partition}old.json": (
+                b"{}",
+                datetime(2026, 10, 5, 1, tzinfo=timezone.utc),
+            ),
+            f"{partition}new.json": (
+                b"{}",
+                datetime(2026, 10, 5, 9, tzinfo=timezone.utc),
+            ),
+            f"{partition}newest.txt": (
+                b"",
+                datetime(2026, 10, 5, 12, tzinfo=timezone.utc),
+            ),
             "raw/airplane_ticket_rates/extract_date=2026-10-04/yesterday.json": (
                 b"{}",
                 datetime(2026, 10, 4, 23, tzinfo=timezone.utc),
@@ -335,7 +340,6 @@ def test_locator_never_falls_back_to_an_older_day():
         locator.locate(None)
 
 
-# FlightDealsReader
 def test_reader_returns_payload_with_deals_list():
     payload = deals(deal("Cancun", "Mexico"))
     s3 = FakeS3({"k.json": (json.dumps(payload).encode(), None)})
@@ -349,7 +353,6 @@ def test_reader_rejects_bad_files(body):
         FlightDealsReader(client=s3).read(S3Location(BUCKET, "k.json"))
 
 
-# DestinationExtractor / Destination
 def test_extractor_dedupes_skips_blanks_and_normalises():
     payload = deals(
         deal(" Cancun ", " Mexico ", "cun", "d1"),
@@ -381,7 +384,6 @@ def test_destination_search_query_and_label():
     assert Destination("***").label == "UNKNOWN"
 
 
-# HotelQueryBuilder
 def test_query_builder_builds_google_hotels_params():
     params = HotelQueryBuilder(config(adults=2, currency="EUR")).build(
         Destination("Cancun", "Mexico"), STAY
@@ -397,10 +399,14 @@ def test_query_builder_builds_google_hotels_params():
     }
 
 
-# SecretProvider
 @pytest.mark.parametrize(
     "secret_string",
-    ["abc123", " abc123 ", '{"SERPAPI_KEY": "abc123"}', '{"api_key": "abc123", "x": 1}'],
+    [
+        "abc123",
+        " abc123 ",
+        '{"SERPAPI_KEY": "abc123"}',
+        '{"api_key": "abc123", "x": 1}',
+    ],
 )
 def test_secret_provider_extracts_key(secret_string):
     assert SecretProvider("id", client=FakeSecrets(secret_string)).get() == "abc123"
@@ -414,7 +420,6 @@ def test_secret_provider_caches_value():
     assert client.calls == 1
 
 
-# ResponseValidator
 def test_validator_accepts_success():
     assert ResponseValidator().validate(success())["search_metadata"] == {
         "status": "Success"
@@ -436,7 +441,6 @@ def test_validator_rejects_errors(body):
         ResponseValidator().validate(body)
 
 
-# RawObjectKeyBuilder
 def test_key_builder_builds_partitioned_key_under_raw_prefix():
     run = ExtractRun(
         run_id="abcd1234",
@@ -451,7 +455,6 @@ def test_key_builder_builds_partitioned_key_under_raw_prefix():
     )
 
 
-# ExtractService
 def test_service_writes_one_file_per_destination():
     payload = deals(deal("Cancun", "Mexico", "CUN"), deal("Paris", "France", "CDG"))
     writer = FakeWriter()
@@ -528,7 +531,6 @@ def test_service_applies_query_param_overrides():
     assert client.calls[0]["adults"] == "3"
 
 
-# Composition root
 def test_build_locator_reads_from_airplane_ticket_rates_bucket(monkeypatch):
     monkeypatch.setattr(handler.boto3, "client", lambda *_a, **_k: None)
     locator = build_locator(config(aws_airplane_ticket_rates_s3_bucket="flights"))
@@ -542,7 +544,6 @@ def test_build_service_writes_to_hotel_room_rates_bucket(monkeypatch):
     assert service._key_builder._prefix == "raw/hotel_room_rates"
 
 
-# lambda_handler
 def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
     set_required_env(monkeypatch)
     built = []
@@ -574,3 +575,106 @@ def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
     }
     assert len(built) == 1
     assert built[0].aws_hotel_room_rates_s3_bucket == BUCKET
+
+
+class FakeResponse:
+    def __init__(self, body, status=200):
+        self._body = body
+        self.status = status
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc):
+        return False
+
+
+class FakeUrlopen:
+
+    def __init__(self, response):
+        self._response = response
+        self.requests = []
+        self.timeouts = []
+
+    def __call__(self, request, timeout):
+        self.requests.append(request)
+        self.timeouts.append(timeout)
+        if isinstance(self._response, Exception):
+            raise self._response
+        return self._response
+
+
+def split_url(request):
+    url = urllib.parse.urlsplit(request.full_url)
+    return f"{url.scheme}://{url.netloc}{url.path}", urllib.parse.parse_qs(url.query)
+
+
+def hotel_client(timeout=5):
+    secrets = SecretProvider("id", client=FakeSecrets("abc123"))
+    return HotelSearchClient(
+        "https://serpapi/search.json", QueryParamKeyAuthenticator(secrets), timeout
+    )
+
+
+def test_authenticator_adds_api_key_without_mutating_input():
+    secrets = SecretProvider("id", client=FakeSecrets("abc123"))
+    params = {"q": "Cancun"}
+    assert QueryParamKeyAuthenticator(secrets).apply(params) == {
+        "q": "Cancun",
+        "api_key": "abc123",
+    }
+    assert params == {"q": "Cancun"}
+
+
+def test_hotel_client_sends_params_and_api_key(monkeypatch):
+    urlopen = FakeUrlopen(FakeResponse(success()))
+    monkeypatch.setattr(handler.urllib.request, "urlopen", urlopen)
+
+    body = hotel_client(timeout=9).fetch({"engine": "google_hotels", "q": "Cancun"})
+
+    request = urlopen.requests[0]
+    assert body == success()
+    assert split_url(request) == (
+        "https://serpapi/search.json",
+        {"engine": ["google_hotels"], "q": ["Cancun"], "api_key": ["abc123"]},
+    )
+    assert request.get_method() == "GET"
+    assert request.get_header("Accept") == "application/json"
+    assert urlopen.timeouts == [9]
+
+
+def test_hotel_client_reraises_http_errors(monkeypatch):
+    error = urllib.error.HTTPError(
+        "https://serpapi/search.json", 401, "Unauthorized", {}, io.BytesIO(b"bad")
+    )
+    monkeypatch.setattr(handler.urllib.request, "urlopen", FakeUrlopen(error))
+    with pytest.raises(urllib.error.HTTPError):
+        hotel_client().fetch({"q": "Cancun"})
+
+
+def test_hotel_client_reraises_connection_errors(monkeypatch):
+    monkeypatch.setattr(
+        handler.urllib.request, "urlopen", FakeUrlopen(urllib.error.URLError("down"))
+    )
+    with pytest.raises(urllib.error.URLError):
+        hotel_client().fetch({"q": "Cancun"})
+
+
+def test_s3_raw_writer_puts_json_object_and_returns_key():
+    puts = []
+    s3 = types.SimpleNamespace(put_object=lambda **kwargs: puts.append(kwargs))
+    writer = S3RawWriter(BUCKET, client=s3)
+
+    assert writer.write("k.json", b"{}") == "k.json"
+    assert writer.bucket == BUCKET
+    assert puts == [
+        {
+            "Bucket": BUCKET,
+            "Key": "k.json",
+            "Body": b"{}",
+            "ContentType": "application/json",
+        }
+    ]

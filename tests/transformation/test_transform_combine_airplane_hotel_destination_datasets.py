@@ -5,20 +5,15 @@ from datetime import date
 import pytest
 
 pyspark = pytest.importorskip("pyspark")
-from pyspark.sql import SparkSession  # noqa: E402
-from pyspark.sql import types as T  # noqa: E402
+from pyspark.sql import SparkSession
+from pyspark.sql import types as T
 
-# boto3 ships with the Glue runtime but isn't in requirements.txt, so CI may
-# not have it. MyTransform never calls it, so a stub module is enough.
 try:
-    import boto3  # noqa: F401
+    import boto3
 except ImportError:
     sys.modules["boto3"] = types.SimpleNamespace(client=lambda *_a, **_k: None)
 
 
-# awsglue only exists inside the Glue runtime. MyTransform just needs a
-# collection of named frames in and a collection out, so these fakes wrap
-# plain Spark DataFrames.
 class FakeDynamicFrame:
     def __init__(self, df):
         self._df = df
@@ -112,15 +107,13 @@ def spark():
 
 @pytest.fixture(autouse=True)
 def plain_argv(monkeypatch):
-    # The transform reads optional job args (CITY_FILTER, EXTRACT_DATE) from
-    # sys.argv, so keep pytest's own argv out of it.
     monkeypatch.setattr(sys, "argv", ["handler.py"])
 
 
 def fx_rows():
     return [
         ("USD", "CAD", 1.25, "2026-10-15"),
-        ("USD", "CAD", 1.40, "2026-10-01"),  # older rate, should be ignored
+        ("USD", "CAD", 1.40, "2026-10-01"),
         ("USD", "MXN", 20.0, "2026-10-15"),
     ]
 
@@ -130,13 +123,9 @@ def flight_rows():
         ("Washington, D.C.", 250.0, 300, "2026-10-23", "2026-10-30", EXTRACT_DATE),
         ("Washington, D.C.", 200.0, 320, "2026-10-24", "2026-10-31", EXTRACT_DATE),
         ("Vancouver", 400.0, 180, "2026-10-23", "2026-10-30", EXTRACT_DATE),
-        # Flights only: dropped.
         ("Page", 300.0, 90, "2026-10-23", "2026-10-30", EXTRACT_DATE),
-        # Hotels but no activities: dropped.
         ("Austin", 180.0, 150, "2026-10-23", "2026-10-30", EXTRACT_DATE),
-        # Activities but no hotels: dropped.
         ("Boise", 220.0, 110, "2026-10-23", "2026-10-30", EXTRACT_DATE),
-        # Older extract: must not leak into the run.
         ("Denver", 99.0, 120, "2026-10-16", "2026-10-23", OLD_EXTRACT_DATE),
     ]
 
@@ -236,9 +225,36 @@ def activity_rows():
             EXTRACT_DATE,
         ),
         # Not real place names: dropped.
-        (dc, "1285 Elmwood Avenue", "1285 Elmwood Avenue, Washington, DC", ARTWORK, -77.0, 38.9, "us", EXTRACT_DATE),
-        (dc, "Holbrook Street, Washington, DC", "Holbrook Street, Washington, DC", ARTWORK, -77.0, 38.9, "us", EXTRACT_DATE),
-        (dc, "Quincy Street", "Quincy Street, Washington, DC", ARTWORK, -77.0, 38.9, "us", EXTRACT_DATE),
+        (
+            dc,
+            "1285 Elmwood Avenue",
+            "1285 Elmwood Avenue, Washington, DC",
+            ARTWORK,
+            -77.0,
+            38.9,
+            "us",
+            EXTRACT_DATE,
+        ),
+        (
+            dc,
+            "Holbrook Street, Washington, DC",
+            "Holbrook Street, Washington, DC",
+            ARTWORK,
+            -77.0,
+            38.9,
+            "us",
+            EXTRACT_DATE,
+        ),
+        (
+            dc,
+            "Quincy Street",
+            "Quincy Street, Washington, DC",
+            ARTWORK,
+            -77.0,
+            38.9,
+            "us",
+            EXTRACT_DATE,
+        ),
         (dc, "X", "X, Washington, DC", ARTWORK, -77.0, 38.9, "us", EXTRACT_DATE),
         (
             "vancouver_canada",
@@ -250,7 +266,6 @@ def activity_rows():
             "ca",
             EXTRACT_DATE,
         ),
-        # Older extract for the same city: ignored.
         (
             "vancouver_canada",
             "Old Spot",
@@ -271,7 +286,6 @@ def activity_rows():
             "us",
             EXTRACT_DATE,
         ),
-        # Destination with no flights or hotels: not added as a row.
         (
             "omaha_united_states",
             "Old Market",
@@ -325,8 +339,6 @@ def test_one_row_per_city_with_hotels_and_activities_from_the_latest_extract(row
 
 
 def test_washington_dc_activities_join_the_washington_row(rows):
-    # The activities slug is washington_d_c_united_states ("D.C." -> "d_c"),
-    # while flights/hotels key the city as "washington".
     dc = rows["washington"]
     assert dc.has_activities is True
     assert dc.activity_count == 2
@@ -342,10 +354,10 @@ def test_activity_category_skips_access_flags(rows):
 @pytest.mark.parametrize(
     "city",
     [
-        "page",  # flights only
-        "austin",  # hotels, no activities
-        "boise",  # activities, no hotels
-        "omaha",  # activities only, no flights or hotels
+        "page",
+        "austin",
+        "boise",
+        "omaha",
     ],
 )
 def test_cities_missing_hotels_or_activities_are_dropped(rows, city):
@@ -386,7 +398,6 @@ def test_foreign_hotel_prices_convert_with_the_latest_rate(rows):
     assert van.country == "CA"
     assert van.local_currency == "CAD"
     assert van.local_per_usd == 1.25
-    # 1000 CAD at 0.8 USD/CAD over 4 nights
     assert van.hotel_min_stay_usd == 800.0
     assert van.hotel_min_nightly_usd == 200.0
     assert van.hotel_min_stay_local == 1000.0
@@ -396,13 +407,30 @@ def test_foreign_hotel_prices_convert_with_the_latest_rate(rows):
 
 
 def test_country_falls_back_to_activities_then_known_city_list(spark):
-    # Hotel searches without a country, so hotel_country is null.
     def hotel(q):
-        return (q, "USD", 500.0, "2026-10-23", "2026-10-30", 4.0, 3, "Inn", EXTRACT_DATE)
+        return (
+            q,
+            "USD",
+            500.0,
+            "2026-10-23",
+            "2026-10-30",
+            4.0,
+            3,
+            "Inn",
+            EXTRACT_DATE,
+        )
 
-    # No country suffix or country_code on Cancun/Page, so activity_country is null.
     def activity(destination, country_code):
-        return (destination, "Main Plaza", "Main Plaza", ["tourism"], 0.0, 0.0, country_code, EXTRACT_DATE)
+        return (
+            destination,
+            "Main Plaza",
+            "Main Plaza",
+            ["tourism"],
+            0.0,
+            0.0,
+            country_code,
+            EXTRACT_DATE,
+        )
 
     rows = run_transform(
         spark,

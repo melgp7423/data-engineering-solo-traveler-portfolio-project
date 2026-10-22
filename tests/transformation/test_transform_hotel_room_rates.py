@@ -7,13 +7,12 @@ from datetime import date, datetime, timezone
 import pyarrow.parquet as pq
 import pytest
 
-# boto3 ships with the Lambda runtime but isn't in requirements.txt, so CI may
-# not have it. Every test injects fakes, so a stub module is enough.
 try:
-    import boto3  # noqa: F401
+    import boto3
 except ImportError:
     sys.modules["boto3"] = types.SimpleNamespace(client=lambda *_a, **_k: None)
 
+from transformation.transform_hotel_room_rates import handler
 from transformation.transform_hotel_room_rates.handler import (
     HotelsTransformer,
     InvalidRawPayloadError,
@@ -97,7 +96,6 @@ def make_payload(properties=None):
     }
 
 
-# Fakes
 class FakePaginator:
     def __init__(self, pages):
         self.pages = pages
@@ -135,7 +133,6 @@ def build_service(s3, today=date(2026, 10, 9)):
     )
 
 
-# HotelsTransformer
 def test_keeps_all_metadata_parameters_and_only_requested_property_fields():
     table = HotelsTransformer().transform(make_payload())
 
@@ -262,7 +259,6 @@ def test_rejects_payload_without_required_section(missing):
         HotelsTransformer().transform(payload)
 
 
-# RawObjectLocator
 def test_locator_lists_every_json_in_todays_partition():
     s3 = FakeS3(
         pages=[
@@ -332,7 +328,6 @@ def test_locator_errors_on_empty_partition():
         locator.locate({})
 
 
-# TransformedKeyBuilder
 def test_key_builder_mirrors_partition_and_swaps_extension():
     assert (
         TransformedKeyBuilder("", "").build(RAW_KEY)
@@ -346,7 +341,6 @@ def test_key_builder_mirrors_partition_and_swaps_extension():
     )
 
 
-# TransformService
 def test_service_transforms_every_file_in_partition():
     s3 = FakeS3(
         objects={
@@ -442,3 +436,94 @@ def test_config_prefixes_default_to_empty(monkeypatch):
 
     assert cfg.raw_prefix == ""
     assert cfg.transformed_prefix == ""
+
+
+def test_build_service_wires_config(monkeypatch):
+    monkeypatch.setattr(handler.boto3, "client", lambda *_a, **_k: None)
+    service = handler.build_service(
+        TransformConfig(
+            aws_hotel_room_rates_s3_bucket="travel-bucket",
+            raw_prefix="raw/",
+            transformed_prefix="transformed/",
+        )
+    )
+    assert service._locator._default_bucket == "travel-bucket"
+    assert service._writer.bucket == "travel-bucket"
+
+
+def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "travel-bucket")
+    built = []
+
+    class StubService:
+        def run(self, event):
+            return {"event": event}
+
+    def fake_build_service(cfg):
+        built.append(cfg)
+        return StubService()
+
+    monkeypatch.setattr(handler, "_service", None)
+    monkeypatch.setattr(handler, "build_service", fake_build_service)
+
+    event = {"bucket": "travel-bucket", "key": "k.json"}
+    first = handler.lambda_handler(event, None)
+    handler.lambda_handler(event, None)
+
+    assert first == {"event": event}
+    assert len(built) == 1
+    assert built[0].aws_hotel_room_rates_s3_bucket == "travel-bucket"
+
+
+def test_lambda_handler_treats_missing_event_as_empty(monkeypatch):
+    class StubService:
+        def run(self, event):
+            return event
+
+    monkeypatch.setattr(handler, "_service", StubService())
+    assert handler.lambda_handler(None, None) == {}
+
+
+# RawObjectLocator event shapes
+def test_locator_reads_every_s3_notification_record_and_decodes_keys():
+    event = {
+        "Records": [
+            {
+                "s3": {
+                    "bucket": {"name": "b"},
+                    "object": {"key": "extract_date%3D2026-10-10/a+b.json"},
+                }
+            },
+            {
+                "s3": {
+                    "bucket": {"name": "b"},
+                    "object": {"key": "extract_date%3D2026-10-10/c.json"},
+                }
+            },
+        ]
+    }
+    assert RawObjectLocator("travel-bucket").locate(event) == (
+        "b",
+        ["extract_date=2026-10-10/a b.json", "extract_date=2026-10-10/c.json"],
+    )
+
+
+def test_locator_reads_eventbridge_object_created_event():
+    event = {
+        "detail-type": "Object Created",
+        "detail": {"bucket": {"name": "b"}, "object": {"key": "k.json"}},
+    }
+    assert RawObjectLocator("travel-bucket").locate(event) == ("b", ["k.json"])
+
+
+def test_locator_uses_default_bucket_when_event_has_only_key():
+    assert RawObjectLocator("travel-bucket").locate({"key": "k.json"}) == (
+        "travel-bucket",
+        ["k.json"],
+    )
+
+
+@pytest.mark.parametrize("event", [None, "k.json", ["k.json"]])
+def test_locator_rejects_non_object_events(event):
+    with pytest.raises(ValueError, match="JSON object"):
+        RawObjectLocator("travel-bucket").locate(event)

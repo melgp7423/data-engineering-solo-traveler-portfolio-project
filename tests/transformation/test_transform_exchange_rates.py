@@ -8,13 +8,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-# boto3 ships with the Lambda runtime but isn't in requirements.txt, so CI may
-# not have it. Every test injects fakes, so a stub module is enough.
 try:
-    import boto3  # noqa: F401
+    import boto3
 except ImportError:
     sys.modules["boto3"] = types.SimpleNamespace(client=lambda *_a, **_k: None)
 
+from transformation.transform_exchange_rates import handler
 from transformation.transform_exchange_rates.handler import (
     ExchangeRatesTransformer,
     InvalidRawPayloadError,
@@ -34,7 +33,6 @@ OTHER_KEY = "extract_date=2026-10-10/rates_USD_2026-10-10_101500_aa11bb22.json"
 PAYLOAD = {"data": {"CAD": 1.4257001775, "MXN": 18.3700024185, "USD": 1}}
 
 
-# Fakes
 class FakePaginator:
     def __init__(self, pages):
         self.pages = pages
@@ -63,7 +61,6 @@ class FakeS3:
 
 
 def build_service(s3, today=date(2026, 10, 10), raw_prefix="", transformed_prefix=""):
-    # Raw and transformed data share one bucket; the prefixes keep them apart.
     return TransformService(
         locator=RawObjectLocator(
             "travel-bucket", raw_prefix, client=s3, today=lambda: today
@@ -75,9 +72,6 @@ def build_service(s3, today=date(2026, 10, 10), raw_prefix="", transformed_prefi
     )
 
 
-# ---------------------------------------------------------------------------
-# RawKeyParser
-# ---------------------------------------------------------------------------
 def test_key_parser_extracts_base_and_date_from_file_name():
     assert RawKeyParser().parse(RAW_KEY) == ("USD", date(2026, 10, 10))
     assert RawKeyParser().parse(
@@ -97,9 +91,6 @@ def test_key_parser_rejects_unexpected_file_names(key):
         RawKeyParser().parse(key)
 
 
-# ---------------------------------------------------------------------------
-# ExchangeRatesTransformer
-# ---------------------------------------------------------------------------
 def test_one_row_per_currency_with_rate_date_and_base():
     table = ExchangeRatesTransformer().transform(PAYLOAD, RAW_KEY)
 
@@ -148,9 +139,6 @@ def test_rejects_payload_without_numeric_rates(payload):
         ExchangeRatesTransformer().transform(payload, RAW_KEY)
 
 
-# ---------------------------------------------------------------------------
-# RawObjectLocator
-# ---------------------------------------------------------------------------
 def test_locator_uses_extract_lambda_output_key():
     locator = RawObjectLocator("raw-bucket")
 
@@ -193,7 +181,6 @@ def test_locator_errors_on_empty_partition():
         locator.locate({})
 
 
-# TransformedKeyBuilder
 def test_key_builder_mirrors_partition_and_swaps_extension():
     assert (
         TransformedKeyBuilder("", "").build(RAW_KEY)
@@ -207,7 +194,6 @@ def test_key_builder_mirrors_partition_and_swaps_extension():
     )
 
 
-# TransformService
 def test_service_writes_parquet_for_every_file_in_partition():
     s3 = FakeS3(
         objects={
@@ -272,7 +258,10 @@ def test_service_reads_and_writes_same_bucket_under_separate_prefixes():
     ).run({})
 
     assert s3.paginator.calls == [
-        {"Bucket": "travel-bucket", "Prefix": "raw/exchange_rates/extract_date=2026-10-10/"}
+        {
+            "Bucket": "travel-bucket",
+            "Prefix": "raw/exchange_rates/extract_date=2026-10-10/",
+        }
     ]
     assert result["source_bucket"] == result["bucket"] == "travel-bucket"
     assert [(p["Bucket"], p["Key"]) for p in s3.puts] == [
@@ -283,7 +272,6 @@ def test_service_reads_and_writes_same_bucket_under_separate_prefixes():
     ]
 
 
-# TransformConfig
 def test_config_from_env_reads_renamed_bucket_variable(monkeypatch):
     monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", " travel-bucket ")
 
@@ -341,3 +329,93 @@ def test_config_from_env_prefixes_default_to_empty(monkeypatch):
 
     assert cfg.raw_prefix == ""
     assert cfg.transformed_prefix == ""
+
+
+def test_build_service_wires_config(monkeypatch):
+    monkeypatch.setattr(handler.boto3, "client", lambda *_a, **_k: None)
+    service = handler.build_service(
+        TransformConfig(
+            aws_exchange_rates_s3_bucket="travel-bucket",
+            raw_prefix="raw/",
+            transformed_prefix="transformed/",
+        )
+    )
+    assert service._locator._default_bucket == "travel-bucket"
+    assert service._writer.bucket == "travel-bucket"
+
+
+def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", "travel-bucket")
+    built = []
+
+    class StubService:
+        def run(self, event):
+            return {"event": event}
+
+    def fake_build_service(cfg):
+        built.append(cfg)
+        return StubService()
+
+    monkeypatch.setattr(handler, "_service", None)
+    monkeypatch.setattr(handler, "build_service", fake_build_service)
+
+    event = {"bucket": "travel-bucket", "key": "k.json"}
+    first = handler.lambda_handler(event, None)
+    handler.lambda_handler(event, None)
+
+    assert first == {"event": event}
+    assert len(built) == 1
+    assert built[0].aws_exchange_rates_s3_bucket == "travel-bucket"
+
+
+def test_lambda_handler_treats_missing_event_as_empty(monkeypatch):
+    class StubService:
+        def run(self, event):
+            return event
+
+    monkeypatch.setattr(handler, "_service", StubService())
+    assert handler.lambda_handler(None, None) == {}
+
+
+def test_locator_reads_every_s3_notification_record_and_decodes_keys():
+    event = {
+        "Records": [
+            {
+                "s3": {
+                    "bucket": {"name": "b"},
+                    "object": {"key": "extract_date%3D2026-10-10/a+b.json"},
+                }
+            },
+            {
+                "s3": {
+                    "bucket": {"name": "b"},
+                    "object": {"key": "extract_date%3D2026-10-10/c.json"},
+                }
+            },
+        ]
+    }
+    assert RawObjectLocator("travel-bucket").locate(event) == (
+        "b",
+        ["extract_date=2026-10-10/a b.json", "extract_date=2026-10-10/c.json"],
+    )
+
+
+def test_locator_reads_eventbridge_object_created_event():
+    event = {
+        "detail-type": "Object Created",
+        "detail": {"bucket": {"name": "b"}, "object": {"key": "k.json"}},
+    }
+    assert RawObjectLocator("travel-bucket").locate(event) == ("b", ["k.json"])
+
+
+def test_locator_uses_default_bucket_when_event_has_only_key():
+    assert RawObjectLocator("travel-bucket").locate({"key": "k.json"}) == (
+        "travel-bucket",
+        ["k.json"],
+    )
+
+
+@pytest.mark.parametrize("event", [None, "k.json", ["k.json"]])
+def test_locator_rejects_non_object_events(event):
+    with pytest.raises(ValueError, match="JSON object"):
+        RawObjectLocator("travel-bucket").locate(event)
