@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1010 600" width="1010" height="600" role="img" aria-labelledby="title desc">
+  <title id="title">Athena to Aurora DSQL architecture (private mode)</title>
+  <desc id="desc">Amazon Athena invokes a connector Lambda inside a VPC. The connector reaches the four Aurora DSQL clusters, Secrets Manager, the Athena API and the S3 spill bucket only through VPC endpoints. A token refresher Lambda, triggered every 5 minutes by EventBridge, writes fresh IAM auth tokens into Secrets Manager. A cluster resource policy denies connections that do not come from the VPC.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrow-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0F766E"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#B45309"/>
+    </marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#0F172A" flood-opacity="0.10"/>
+    </filter>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #0F172A; }
+      .h  { font-size: 14px; font-weight: 600; }
+      .s  { font-size: 11.5px; fill: #475569; }
+      .xs { font-size: 10.5px; fill: #64748B; }
+      .lbl { font-size: 10.5px; fill: #475569; font-weight: 500; }
+      .title { font-size: 20px; font-weight: 700; }
+      .sub { font-size: 12.5px; fill: #475569; }
+      .flow { fill: none; stroke: #64748B; stroke-width: 1.6; }
+      .flow-teal { fill: none; stroke: #0F766E; stroke-width: 1.6; }
+      .flow-amber { fill: none; stroke: #B45309; stroke-width: 1.6; stroke-dasharray: 5 4; }
+    </style>
+  </defs>
+
+  <!-- card -->
+  <rect x="0.5" y="0.5" width="1009" height="599" rx="16" fill="#F8FAFC" stroke="#E2E8F0"/>
+
+  <!-- title -->
+  <text x="32" y="44" class="title">Athena → Aurora DSQL</text>
+  <text x="32" y="66" class="sub">Live federated queries over AWS PrivateLink</text>
+
+  <!-- ===== Left column: user + Athena ===== -->
+  <g filter="url(#shadow)">
+    <rect x="32" y="132" width="156" height="60" rx="10" fill="#FFFFFF" stroke="#CBD5E1"/>
+  </g>
+  <circle cx="56" cy="155" r="6" fill="none" stroke="#475569" stroke-width="1.6"/>
+  <path d="M45 176 a11 9 0 0 1 22 0" fill="none" stroke="#475569" stroke-width="1.6"/>
+  <text x="76" y="158" class="h">Analyst</text>
+  <text x="76" y="175" class="s">query editor / BI</text>
+
+  <path d="M110 192 V 246" class="flow" marker-end="url(#arrow)"/>
+  <text x="118" y="223" class="lbl">SQL</text>
+
+  <g filter="url(#shadow)">
+    <rect x="32" y="250" width="156" height="94" rx="10" fill="#F5F3FF" stroke="#7C3AED"/>
+  </g>
+  <rect x="32" y="250" width="6" height="94" rx="3" fill="#7C3AED"/>
+  <text x="50" y="276" class="h">Amazon Athena</text>
+  <text x="50" y="294" class="s">data sources</text>
+  <text x="50" y="310" class="s">dsql_west · dsql_east</text>
+  <text x="50" y="326" class="s">dsql_north · dsql_south</text>
+
+  <!-- ===== VPC ===== -->
+  <rect x="238" y="100" width="464" height="372" rx="14" fill="#FFFFFF" stroke="#0F766E" stroke-width="1.4" stroke-dasharray="6 5"/>
+  <rect x="252" y="88" width="252" height="24" rx="12" fill="#0F766E"/>
+  <text x="266" y="104" style="font-size:11.5px;font-weight:600;fill:#FFFFFF">VPC</text>
+  <rect x="512" y="93" width="128" height="18" rx="9" fill="#F0FDFA" stroke="#99F6E4"/>
+  <text x="576" y="106" class="xs" text-anchor="middle">private subnets · 2 AZs</text>
+
+  <!-- Athena -> connector -->
+  <path d="M188 288 H 254" class="flow" marker-end="url(#arrow)"/>
+  <text x="194" y="280" class="lbl">invoke</text>
+
+  <!-- Connector Lambda -->
+  <g filter="url(#shadow)">
+    <rect x="258" y="236" width="178" height="104" rx="10" fill="#FFF7ED" stroke="#EA580C"/>
+  </g>
+  <rect x="258" y="236" width="6" height="104" rx="3" fill="#EA580C"/>
+  <text x="276" y="262" class="h">Connector Lambda</text>
+  <text x="276" y="280" class="s">Athena PostgreSQL</text>
+  <text x="276" y="295" class="s">connector · Java 17</text>
+  <rect x="274" y="308" width="154" height="20" rx="10" fill="#FFFFFF" stroke="#FDBA74"/>
+  <text x="351" y="322" class="xs" text-anchor="middle">sg: athena-dsql-connector</text>
+
+  <!-- connector -> endpoints (fan out) -->
+  <path d="M436 270 C 476 270, 476 150, 516 150" class="flow-teal" marker-end="url(#arrow-teal)"/>
+  <path d="M436 284 C 480 284, 478 264, 516 264" class="flow-teal" marker-end="url(#arrow-teal)"/>
+  <path d="M436 300 C 480 300, 478 340, 516 340" class="flow-teal" marker-end="url(#arrow-teal)"/>
+  <path d="M436 316 C 476 316, 476 416, 516 416" class="flow-teal" marker-end="url(#arrow-teal)"/>
+
+  <!-- Endpoints -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="132" width="164" height="52" rx="10" fill="#F0FDFA" stroke="#0F766E"/>
+    <rect x="520" y="238" width="164" height="52" rx="10" fill="#F0FDFA" stroke="#0F766E"/>
+    <rect x="520" y="314" width="164" height="52" rx="10" fill="#F0FDFA" stroke="#0F766E"/>
+    <rect x="520" y="390" width="164" height="52" rx="10" fill="#F0FDFA" stroke="#0F766E"/>
+  </g>
+  <text x="534" y="154" class="h">DSQL endpoint</text>
+  <text x="534" y="172" class="s">PrivateLink · TLS :5432</text>
+  <text x="534" y="260" class="h">Secrets Manager</text>
+  <text x="534" y="278" class="s">interface endpoint · :443</text>
+  <text x="534" y="336" class="h">Athena API</text>
+  <text x="534" y="354" class="s">interface endpoint · :443</text>
+  <text x="534" y="412" class="h">Amazon S3</text>
+  <text x="534" y="430" class="s">gateway endpoint</text>
+
+  <text x="520" y="204" class="xs">sg: athena-dsql-endpoints</text>
+  <text x="520" y="217" class="xs">inbound 443 / 5432</text>
+  <text x="520" y="230" class="xs">from connector only</text>
+
+  <text x="258" y="458" class="xs">Every interface endpoint has private DNS enabled.</text>
+
+  <!-- ===== Right column: AWS services ===== -->
+  <!-- DSQL clusters (cylinders) -->
+  <g filter="url(#shadow)">
+    <path d="M760 116 v44 a22 6 0 0 0 44 0 v-44" fill="#EFF6FF" stroke="#2563EB"/>
+    <ellipse cx="782" cy="116" rx="22" ry="6" fill="#DBEAFE" stroke="#2563EB"/>
+    <path d="M812 116 v44 a22 6 0 0 0 44 0 v-44" fill="#EFF6FF" stroke="#2563EB"/>
+    <ellipse cx="834" cy="116" rx="22" ry="6" fill="#DBEAFE" stroke="#2563EB"/>
+    <path d="M864 116 v44 a22 6 0 0 0 44 0 v-44" fill="#EFF6FF" stroke="#2563EB"/>
+    <ellipse cx="886" cy="116" rx="22" ry="6" fill="#DBEAFE" stroke="#2563EB"/>
+    <path d="M916 116 v44 a22 6 0 0 0 44 0 v-44" fill="#EFF6FF" stroke="#2563EB"/>
+    <ellipse cx="938" cy="116" rx="22" ry="6" fill="#DBEAFE" stroke="#2563EB"/>
+  </g>
+  <text x="782" y="141" text-anchor="middle" style="font-size:9.5px;fill:#475569">DSQL</text>
+  <text x="782" y="156" text-anchor="middle" style="font-size:11px;font-weight:600">West</text>
+  <text x="834" y="141" text-anchor="middle" style="font-size:9.5px;fill:#475569">DSQL</text>
+  <text x="834" y="156" text-anchor="middle" style="font-size:11px;font-weight:600">East</text>
+  <text x="886" y="141" text-anchor="middle" style="font-size:9.5px;fill:#475569">DSQL</text>
+  <text x="886" y="156" text-anchor="middle" style="font-size:11px;font-weight:600">North</text>
+  <text x="938" y="141" text-anchor="middle" style="font-size:9.5px;fill:#475569">DSQL</text>
+  <text x="938" y="156" text-anchor="middle" style="font-size:11px;font-weight:600">South</text>
+
+  <!-- DSQL endpoint -> all clusters (bus line) -->
+  <path d="M684 150 H 708 V 86 H 938" class="flow-teal"/>
+  <path d="M782 86 V 106" class="flow-teal" marker-end="url(#arrow-teal)"/>
+  <path d="M834 86 V 106" class="flow-teal" marker-end="url(#arrow-teal)"/>
+  <path d="M886 86 V 106" class="flow-teal" marker-end="url(#arrow-teal)"/>
+  <path d="M938 86 V 106" class="flow-teal" marker-end="url(#arrow-teal)"/>
+  <circle cx="708" cy="150" r="2.6" fill="#0F766E"/>
+  <text x="750" y="80" class="xs">Aurora DSQL clusters</text>
+
+  <!-- lock policy pill -->
+  <rect x="760" y="198" width="200" height="26" rx="13" fill="#FEF2F2" stroke="#DC2626"/>
+  <rect x="774" y="210" width="10" height="8" rx="1.5" fill="#DC2626"/>
+  <path d="M776 210 v-3 a3 3 0 0 1 6 0 v3" fill="none" stroke="#DC2626" stroke-width="1.5"/>
+  <text x="792" y="215" style="font-size:10.5px;font-weight:600;fill:#B91C1C">deny if not from this VPC</text>
+
+  <!-- Secrets Manager -->
+  <g filter="url(#shadow)">
+    <rect x="760" y="238" width="200" height="52" rx="10" fill="#EFF6FF" stroke="#2563EB"/>
+  </g>
+  <rect x="760" y="238" width="6" height="52" rx="3" fill="#2563EB"/>
+  <text x="778" y="260" class="h">Secrets Manager</text>
+  <text x="778" y="278" class="s">athena-dsql/&lt;catalog&gt; × 4</text>
+  <path d="M684 264 H 756" class="flow-teal" marker-end="url(#arrow-teal)"/>
+
+  <!-- Athena API -->
+  <g filter="url(#shadow)">
+    <rect x="760" y="314" width="200" height="52" rx="10" fill="#F5F3FF" stroke="#7C3AED"/>
+  </g>
+  <rect x="760" y="314" width="6" height="52" rx="3" fill="#7C3AED"/>
+  <text x="778" y="336" class="h">Athena API</text>
+  <text x="778" y="354" class="s">query status checks</text>
+  <path d="M684 340 H 756" class="flow-teal" marker-end="url(#arrow-teal)"/>
+
+  <!-- S3 spill -->
+  <g filter="url(#shadow)">
+    <rect x="760" y="390" width="200" height="52" rx="10" fill="#EFF6FF" stroke="#2563EB"/>
+  </g>
+  <rect x="760" y="390" width="6" height="52" rx="3" fill="#2563EB"/>
+  <text x="778" y="412" class="h">S3 spill bucket</text>
+  <text x="778" y="430" class="s">large results · 1-day expiry</text>
+  <path d="M684 416 H 756" class="flow-teal" marker-end="url(#arrow-teal)"/>
+
+  <!-- ===== Bottom: token refresh (outside VPC) ===== -->
+  <g filter="url(#shadow)">
+    <rect x="258" y="504" width="178" height="56" rx="10" fill="#FFFBEB" stroke="#D97706"/>
+    <rect x="506" y="504" width="208" height="56" rx="10" fill="#FFF7ED" stroke="#EA580C"/>
+  </g>
+  <rect x="258" y="504" width="6" height="56" rx="3" fill="#D97706"/>
+  <rect x="506" y="504" width="6" height="56" rx="3" fill="#EA580C"/>
+  <text x="276" y="527" class="h">EventBridge</text>
+  <text x="276" y="545" class="s">schedule · every 5 min</text>
+  <text x="524" y="527" class="h">Token refresher Lambda</text>
+  <text x="524" y="545" class="s">signs DSQL IAM auth tokens</text>
+
+  <path d="M436 532 H 502" class="flow" marker-end="url(#arrow)"/>
+  <text x="446" y="524" class="lbl">trigger</text>
+
+  <path d="M714 532 H 984 V 264 H 964" class="flow-amber" marker-end="url(#arrow-amber)"/>
+  <text x="742" y="524" class="lbl" style="fill:#B45309">writes fresh token (1-hour TTL)</text>
+
+</svg>
