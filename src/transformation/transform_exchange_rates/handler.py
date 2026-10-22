@@ -1,31 +1,3 @@
-"""
-Lambda: read every raw freecurrencyapi JSON file in one extract_date partition
-from S3, turn the rates into columns, and write each one back to S3 as Parquet
-
-Classes and their one job:
-    TransformConfig          -> read & validate settings
-    RawObjectLocator         -> work out which raw S3 objects to transform from the event
-    S3RawReader              -> read the raw JSON from S3
-    RawKeyParser             -> raw key -> (base currency, rate date)
-    ExchangeRatesTransformer -> raw payload + key -> pyarrow Table
-    TransformedKeyBuilder    -> name the Parquet object
-    S3ParquetWriter          -> serialize the Table to Parquet and write it to S3
-    TransformService         -> orchestrate locate -> (read -> transform -> name -> store) per file
-    lambda_handler           -> Lambda entry point
-
-Environment variables (placeholders shown):
-    AWS_EXCHANGE_RATES_S3_BUCKET                    = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                                      = ""   folder above extract_date= in the raw bucket ("" = bucket root)
-    TRANSFORMED_PREFIX                              = ""   folder above extract_date= in the transformed bucket
-
-Supported events:
-    Step Functions (output of the extract Lambda):  {"bucket": "...", "key": "...", ...} -> that file
-    Schedule / manual test ({}):                    every .json in today's (UTC) partition
-    Another day:                                    {"extract_date": "YYYY-MM-DD"}
-    One file only:                                  {"bucket": "...", "key": "..."}
-    S3 ObjectCreated notification:                  {"Records": [{"s3": {...}}]} -> those files
-"""
-
 import io
 import json
 import logging

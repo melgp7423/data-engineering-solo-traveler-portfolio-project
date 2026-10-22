@@ -1,30 +1,3 @@
-"""
-Lambda: read one raw Google Flights deals JSON file from S3, keep only the
-fields the pipeline needs and write it back to S3 as Parquet
-
-Classes and their one job:
-    TransformConfig          -> read & validate settings
-    RawObjectLocator         -> work out which raw S3 object to transform from the event
-    S3RawReader              -> read the raw JSON from S3
-    DealsTransformer         -> raw payload -> pyarrow Table (metadata + cleaned deals)
-    TransformedKeyBuilder    -> name the Parquet object
-    S3ParquetWriter          -> serialize the Table to Parquet and write it to S3
-    TransformService         -> orchestrate locate -> read -> transform -> name -> store
-    lambda_handler           -> Lambda entry point
-
-Environment variables (placeholders shown):
-    AWS_AIRPLANE_TICKET_RATES_S3_BUCKET             = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                                      = <RAW_PREFIX>
-    TRANSFORMED_PREFIX                              = <TRANSFORMED_PREFIX>
-
-Supported events:
-    Step Functions (output of the extract Lambda): {"bucket": "...", "key": "..."}
-    S3 ObjectCreated notification:                 {"Records": [{"s3": {...}}]}
-    Schedule / manual test with no key ({}):       newest .json in today's
-                                                   extract_date partition
-    Same, for another day:                         {"extract_date": "YYYY-MM-DD"}
-"""
-
 import io
 import json
 import logging

@@ -1,36 +1,3 @@
-"""
-Lambda: Extract Google Flights trip deals from SerpApi and land the raw JSON response in S3
-
-Docs: https://serpapi.com/google-flights-deals-api
-
-Classes and their one job:
-    ExtractConfig              -> read & validate settings
-    OutboundDateCalculator     -> compute outbound_date (today + N days)
-    DealsQueryBuilder          -> build the round-trip query params for one run
-    SecretProvider             -> fetch the API key from Secrets Manager
-    QueryParamKeyAuthenticator -> add ?api_key=... to the request
-    FlightDealsClient          -> make the HTTP call
-    ResponseValidator          -> reject API error payloads (SerpApi returns
-                                errors as {"error": "..."})
-    RawObjectKeyBuilder        -> name the S3 object
-    S3RawWriter                -> write bytes to S3
-    ExtractService             -> orchestrate build query -> fetch -> validate -> store
-    lambda_handler             -> Lambda entry point
-
-
-Environment variables (placeholders shown):
-    API_URL                                         = https://serpapi.com/search.json
-    API_KEY_SECRET                                  = <SECRETS_MANAGER_SECRET_ID>   secret value = your SerpApi key
-    DEPARTURE_ID                                    = PHX   airport code / kgmid of the origin
-    OUTBOUND_OFFSET_DAYS                            = 7     outbound_date = today (UTC) + this many days
-    TRIP_LENGTH_DAYS                                = 14    return_date = outbound_date + this many days
-    ADULTS                                          = 1
-    CURRENCY                                        = USD
-    AWS_AIRPLANE_TICKET_RATES_S3_BUCKET             = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                                      = <RAW_PREFIX>
-    REQUEST_TIMEOUT                                 = 60
-"""
-
 import json
 import logging
 import os

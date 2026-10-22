@@ -1,36 +1,3 @@
-"""
-Lambda: read every raw Geoapify Places JSON page in one extract_date partition
-from S3, keep only complete activities and the fields the pipeline needs
-(including search_city, the hotel destination the extract searched around),
-and write one Parquet file per destination back to S3.
-Raw pages under destination=<slug>/ keep that folder, so the Parquet output is
-split per search city as well.
-
-Classes and their one job:
-    TransformConfig            -> read & validate settings
-    RawObjectLocator           -> work out which raw S3 objects to transform from the event
-    S3RawReader                -> read the raw JSON from S3
-    ActivitiesTransformer      -> raw payload -> list of clean activity rows
-    DestinationGrouper         -> rows -> one pyarrow Table per destination folder
-    TransformedKeyBuilder      -> name the Parquet object
-    S3ParquetWriter            -> serialize the Table to Parquet and write it to S3
-    TransformService           -> orchestrate locate -> read -> transform -> group -> name -> store
-    lambda_handler             -> Lambda entry point
-
-Environment variables (placeholders shown):
-    AWS_DESTINATION_ACTIVITIES_S3_BUCKET                    = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                                              = ""   folder above extract_date= in the raw bucket ("" = bucket root)
-    TRANSFORMED_PREFIX                                      = ""   folder above extract_date= in the transformed bucket
-
-Supported events:
-    Step Functions (output of the extract Lambda):  {"bucket": "...", "places_keys": [...], "extract_date": "YYYY-MM-DD", ...}
-                                                    -> those places pages
-    Schedule / manual test ({}):                    every places_*.json in today's (UTC) partition
-    Another day:                                    {"extract_date": "YYYY-MM-DD"}
-    One file only:                                  {"bucket": "...", "key": "..."}
-    S3 ObjectCreated notification:                  {"Records": [{"s3": {...}}]} -> those files
-"""
-
 import io
 import json
 import logging
@@ -240,9 +207,11 @@ class ActivitiesTransformer:
         # Added by the extract; null for pages extracted before it was.
         search_city = properties.get("search_city")
         row: Dict[str, object] = {
-            "search_city": search_city.strip()
-            if isinstance(search_city, str) and search_city.strip()
-            else None
+            "search_city": (
+                search_city.strip()
+                if isinstance(search_city, str) and search_city.strip()
+                else None
+            )
         }
         for field_name in self.STRING_FIELDS:
             value = properties.get(field_name)
@@ -278,7 +247,9 @@ class ActivitiesTransformer:
     @classmethod
     def is_untitled(cls, name: str) -> bool:
         # NFKC + casefold so any casing or full-width letters still match.
-        return bool(cls._UNTITLED.search(unicodedata.normalize("NFKC", name).casefold()))
+        return bool(
+            cls._UNTITLED.search(unicodedata.normalize("NFKC", name).casefold())
+        )
 
 
 class DestinationGrouper:

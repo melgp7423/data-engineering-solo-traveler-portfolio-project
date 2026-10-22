@@ -1,32 +1,3 @@
-"""
-Lambda: extract exchange rates from freecurrencyapi.com and land the raw JSON response
-
-Classes and their one job:
-    ExtractConfig            -> read & validate settings
-    SecretProvider           -> fetch the API key from Secrets Manager
-    HeaderKeyAuthenticator   -> add the "apikey" header to the request
-    ExchangeRatesClient      -> make the HTTP call
-    ResponseValidator        -> reject payloads without a "data" rates map
-    RawObjectKeyBuilder      -> name the S3 object
-    S3RawWriter              -> write bytes to S3
-    ExtractService           -> orchestrate fetch -> validate -> store
-    lambda_handler           -> Lambda entry point
-
-API docs: https://freecurrencyapi.com/docs/
-    GET https://api.freecurrencyapi.com/v1/latest?base_currency=USD&currencies=CAD,MXN,USD
-    -> {"data": {"CAD": 1.4257001775, "MXN": 18.3700024185, "USD": 1}}
-
-Environment variables (placeholders shown):
-    API_BASE_URL                    = https://api.freecurrencyapi.com/v1
-    API_ENDPOINT                    = latest
-    ACCESS_KEY_SECRET               = <SECRETS_MANAGER_SECRET_ID>   secret value = your freecurrencyapi key
-    BASE_CURRENCY                   = USD
-    CURRENCIES                      = CAD,MXN,USD
-    AWS_EXCHANGE_RATES_S3_BUCKET    = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                      = <RAW_PREFIX>
-    REQUEST_TIMEOUT                 = 30
-"""
-
 import json
 import logging
 import os

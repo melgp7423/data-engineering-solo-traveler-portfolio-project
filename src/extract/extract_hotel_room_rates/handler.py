@@ -1,39 +1,3 @@
-"""
-Lambda: Extract Google Hotels results from SerpApi for the destinations found
-by extract_airplane_ticket_rates and land each raw JSON response in S3
-
-Classes and their one job:
-    ExtractConfig              -> read & validate settings
-    StayDatesCalculator        -> compute check-in / check-out (today + N days)
-    FlightDealsLocator         -> find which flight-deals S3 object to use
-    FlightDealsReader          -> load and parse that object
-    DestinationExtractor       -> turn flight deals into unique destinations
-    HotelQueryBuilder          -> build the query params for one destination
-    SecretProvider             -> fetch the API key from Secrets Manager
-    QueryParamKeyAuthenticator -> add ?api_key=... to the request
-    HotelSearchClient          -> make the HTTP call
-    ResponseValidator          -> reject API error payloads
-    RawObjectKeyBuilder        -> name the S3 object
-    S3RawWriter                -> write bytes to S3
-    ExtractService             -> orchestrate read deals -> search each destination -> store
-    lambda_handler             -> Lambda entry point
-
-Environment variables (placeholders shown):
-    API_URL                                             = https://serpapi.com/search.json
-    API_KEY_SECRET                                      = prod/travelProject/serpApi   secret value = your SerpApi key
-    AWS_AIRPLANE_TICKET_RATES_S3_BUCKET                 = bucket the flights Lambda writes to
-    FLIGHT_DEALS_PREFIX                                 = <FLIGHT_DEALS_RAW_PREFIX>
-    MAX_DESTINATIONS                                    = 50    max hotel searches per run (each costs 1 SerpApi credit)
-    CHECK_IN_OFFSET_DAYS                                = 7     check_in_date  = today (UTC) + this many days (matches flight outbound_date)
-    CHECK_OUT_OFFSET_DAYS                               = 14    check_out_date = today (UTC) + this many days
-    ADULTS                                              = 1
-    HOTEL_CLASS                                         = 3,4,5
-    CURRENCY                                            = USD
-    AWS_HOTEL_ROOM_RATES_S3_BUCKET                      = <YOUR_RAW_BUCKET_NAME>
-    RAW_PREFIX                                          = <RAW_PREFIX>
-    REQUEST_TIMEOUT                                     = 60
-"""
-
 import json
 import logging
 import os
