@@ -209,28 +209,34 @@ The extraction Lambdas need three API keys. The keys are stored in AWS Secrets M
 
 ### AWS ARN keys
 
-The extraction, transformation and load Lambda functions use environment variables to reference the ARNs of the AWS S3 buckets and the Aurora cluster they read from and write to. These values are kept in a local .env file and set on each Lambda function's configuration in AWS, so account-specific resource identifiers aren't exposed.
+Account-specific identifiers are never hard-coded. The deploy workflows read them from GitHub Actions repository secrets, the Lambdas read them from environment variables and the Glue jobs read them from job parameters.
 
-| ENV Type           | Used by                                                                                                                                                          | Environment variable                                                 |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_EXTRACT_EXCHANGE_RATES_ARN`                                     |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN`                              |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_EXTRACT_HOTEL_ROOM_RATES_ARN`                                   |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN`                             |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_TRANSFORM_EXCHANGE_RATES_ARN`                                   |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN`                            |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN`                                 |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN`                           |
-| Glue job name      | `deploy-glue.yaml`                                                                                                                                               | `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB` |
-| Lambda ARN         | `deploy-lambda.yaml`                                                                                                                                             | `AWS_LOAD_COMBINED_DATASET_AURORA_ARN`                               |
-| S3 BUCKET ARN      | `extract_exchange_rates`,<br>`transform_exchange_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`                                              | `AWS_EXCHANGE_RATES_S3_BUCKET`                                       |
-| S3 BUCKET ARN      | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates`,<br>`transform_combine_airplane_hotel_destination_datasets` | `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET`                                |
-| S3 BUCKET ARN      | `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`,<br>`transform_combine_airplane_hotel_destination_datasets`     | `AWS_HOTEL_ROOM_RATES_S3_BUCKET`                                     |
-| S3 BUCKET ARN      | `extract_destination_activities`,<br>`transform_destination_activities`,<br>`transform_combine_airplane_hotel_destination_datasets`                              | `AWS_DESTINATION_ACTIVITIES_S3_BUCKET`                               |
-| S3 BUCKET ARN      | `transform_combine_airplane_hotel_destination_datasets`,<br>`load_gold_layer`                                                                                    | `AWS_COMBINE_AIRPLANE_HOTEL_DESTINATION_TRANSFORMED_DATA_S3_BUCKET`  |
-| AURORA CLUSTER ARN | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates` REVIEW                                                                                            | `AWS_GOLD_LAYER_AURORA_SERVERLESS_CLUSTER`                           |
+#### Deploy targets
 
-Each source keeps its raw (bronze) and transformed (silver) data in the same bucket, separated by folder prefixes set on each Lambda:
+| Type       | Used by              | Repository secret                                                    |
+| ---------- | -------------------- | -------------------------------------------------------------------- |
+| Lambda ARN | `deploy-lambda.yaml` | `AWS_EXTRACT_EXCHANGE_RATES_ARN`                                     |
+| Lambda ARN | `deploy-lambda.yaml` | `AWS_EXTRACT_AIRPLANE_TICKET_RATES_ARN`                              |
+| Lambda ARN | `deploy-lambda.yaml` | `AWS_EXTRACT_HOTEL_ROOM_RATES_ARN`                                   |
+| Lambda ARN | `deploy-lambda.yaml` | `AWS_EXTRACT_DESTINATION_ACTIVITIES_ARN`                             |
+| Lambda ARN | `deploy-lambda.yaml` | `AWS_TRANSFORM_EXCHANGE_RATES_ARN`                                   |
+| Lambda ARN | `deploy-lambda.yaml` | `AWS_TRANSFORM_AIRPLANE_TICKET_RATES_ARN`                            |
+| Lambda ARN | `deploy-lambda.yaml` | `AWS_TRANSFORM_HOTEL_ROOM_RATES_ARN`                                 |
+| Lambda ARN | `deploy-lambda.yaml` | `AWS_TRANSFORM_DESTINATION_ACTIVITIES_ARN`                           |
+| S3 bucket  | `deploy-lambda.yaml` | `AWS_LAMBDA_DEPLOY_ARTIFACTS_S3_BUCKET` (bucket name or ARN)         |
+| Glue job   | `deploy-glue.yaml`   | `AWS_TRANSFORM_COMBINE_AIRPLANE_HOTEL_DESTINATION_DATASETS_GLUE_JOB` |
+| Glue job   | `deploy-glue.yaml`   | `AWS_LOAD_GOLD_LAYER_GLUE_JOB`                                       |
+
+#### S3 buckets
+
+| Used by                                                                                              | Environment variable                   |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `extract_exchange_rates`,<br>`transform_exchange_rates`                                              | `AWS_EXCHANGE_RATES_S3_BUCKET`         |
+| `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates` | `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET`  |
+| `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`     | `AWS_HOTEL_ROOM_RATES_S3_BUCKET`       |
+| `extract_destination_activities`,<br>`transform_destination_activities`                              | `AWS_DESTINATION_ACTIVITIES_S3_BUCKET` |
+
+#### Bucket Prefixes
 
 | Environment variable  | Used by                                    | Purpose                                                                               |
 | --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------- |
