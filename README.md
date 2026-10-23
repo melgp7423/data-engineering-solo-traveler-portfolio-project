@@ -1,6 +1,6 @@
 # Solo Traveler Data Engineering Project
 
-## Table of contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Tech Stack](#tech-stack)
