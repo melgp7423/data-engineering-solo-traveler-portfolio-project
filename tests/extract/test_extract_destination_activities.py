@@ -443,6 +443,43 @@ def test_config_rejects_geocode_concurrency_out_of_range():
             config(geocode_concurrency=value).validate()
 
 
+MAX_PLACES_LIMIT = 500  # Geoapify returns 400 Bad Request above this
+
+
+def test_config_places_limit_defaults_to_at_most_500(monkeypatch):
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
+    monkeypatch.delenv("PLACES_LIMIT", raising=False)
+
+    assert config().places_limit <= MAX_PLACES_LIMIT
+    assert ExtractConfig.from_env().places_limit <= MAX_PLACES_LIMIT
+
+
+def test_config_accepts_places_limit_up_to_500():
+    for value in (1, MAX_PLACES_LIMIT):
+        config(places_limit=value).validate()
+
+
+def test_config_rejects_places_limit_out_of_range():
+    for value in (0, MAX_PLACES_LIMIT + 1, 1000):
+        with pytest.raises(ValueError, match="PLACES_LIMIT"):
+            config(places_limit=value).validate()
+
+
+def test_config_from_env_rejects_places_limit_above_500(monkeypatch):
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
+    monkeypatch.setenv("PLACES_LIMIT", str(MAX_PLACES_LIMIT + 1))
+
+    with pytest.raises(ValueError, match="PLACES_LIMIT"):
+        ExtractConfig.from_env()
+
+
+def test_places_query_sends_limit_of_at_most_500():
+    body = PlacesQueryBuilder(config()).build({"type": "MultiPolygon"}, offset=0)
+    assert body["limit"] <= MAX_PLACES_LIMIT
+
+
 def test_config_from_env_uses_synchronous_geocoding_defaults(monkeypatch):
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
