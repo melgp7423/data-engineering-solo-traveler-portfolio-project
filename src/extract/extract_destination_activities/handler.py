@@ -108,7 +108,7 @@ class ExtractConfig:
             raise ValueError("CATEGORIES must list 1-100 Geoapify category keys")
         if not 0 < self.area_radius_meters <= 100000:
             raise ValueError("AREA_RADIUS_METERS must be between 1 and 100000")
-        if not 1 <= self.places_limit <= 1000:
+        if not 1 <= self.places_limit <= 500:
             raise ValueError("PLACES_LIMIT must be between 1 and 500")
         if self.max_pages < 1:
             raise ValueError("MAX_PAGES must be at least 1")
