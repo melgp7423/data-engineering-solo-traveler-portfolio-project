@@ -41,7 +41,9 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 
 ### Dashboard Overview
 
-This Amazon QuickSight dashboard presents travel cost data extracted on October 23, 2026. Flight and hotel rates reflect a departure/check-in date of October 30, 2026, and a return/check-out date of November 6, 2026, with Phoenix as the origin.
+This Amazon QuickSight dashboard presents travel cost data extracted on October 23, 2026.
+
+Flight and hotel rates reflect a departure/check-in date of October 30, 2026, and a return/check-out date of November 6, 2026 with Phoenix set as the origin.
 
 ### Map Visualizations
 
