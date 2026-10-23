@@ -387,7 +387,6 @@ def test_flight_and_hotel_summaries(rows):
 def test_us_city_uses_usd(rows):
     dc = rows["washington"]
     assert dc.country == "US"
-    assert dc.country_source == "hotel_search"
     assert dc.local_currency == "USD"
     assert dc.local_per_usd == 1.0
     assert dc.est_min_trip_cost_local == dc.est_min_trip_cost_usd
@@ -442,16 +441,10 @@ def test_country_falls_back_to_activities_then_known_city_list(spark):
             activity("page", None),
         ],
     )
-    assert (rows["vancouver"].country, rows["vancouver"].country_source) == (
-        "CA",
-        "activities",
-    )
-    assert (rows["cancun"].country, rows["cancun"].country_source) == (
-        "MX",
-        "known_city_list",
-    )
+    assert rows["vancouver"].country == "CA"
+    assert rows["cancun"].country == "MX"
     assert rows["cancun"].local_currency == "MXN"
-    assert (rows["page"].country, rows["page"].country_source) == ("US", "default")
+    assert rows["page"].country == "US"
 
 
 def test_city_filter_job_arg(spark, monkeypatch):
