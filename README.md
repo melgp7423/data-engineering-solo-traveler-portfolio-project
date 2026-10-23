@@ -10,8 +10,8 @@
 - [Data Sources](#data-sources)
 - [Getting Started](#getting-started)
 - [Setup](#setup)
-- [Athena/Aurora DSQL Connector](#athenaaurora-dsql-connector)
 - [CI/CD Pipeline](#cicd-pipeline)
+- [Athena/Aurora DSQL Connector](#athenaaurora-dsql-connector)
 
 ## Overview
 
@@ -239,6 +239,24 @@ Each source keeps its raw (bronze) and transformed (silver) data in the same buc
 | `FLIGHT_DEALS_PREFIX` | `extract_hotel_room_rates`                 | Raw prefix of the airplane ticket rates data in `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET` |
 | `HOTEL_PREFIX`        | `extract_destination_activities`           | Raw prefix of the hotel room rates data in `AWS_HOTEL_ROOM_RATES_S3_BUCKET`           |
 
+## CI/CD Pipeline
+
+The Lambda functions and the Glue job are tested and deployed automatically with GitHub Actions through two separate workflows.
+
+| Workflow                                                     | Deploys                                                              | Packaged as                   |
+| ------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- |
+| [`deploy-lambda.yaml`](.github/workflows/deploy-lambda.yaml) | Every `extract_*` and `transform_*` Lambda function                  | `.zip` uploaded to AWS Lambda |
+| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `transform_combine_airplane_hotel_destination_datasets` Glue job | Python script uploaded to S3  |
+| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `load_gold_layer` Glue job                                       | Python script uploaded to S3  |
+
+### Lambda pipeline (`deploy-lambda.yaml`)
+
+The Lambda workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
+
+### Glue job pipeline (`deploy-glue.yaml`)
+
+The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs so it has its own workflow.
+
 ## Athena/Aurora DSQL Connector
 
 Athena queries the four Aurora DSQL clusters live through a federated query connector. Everything is created by `setup-athena-dsql.sh` and is ran from AWS CloudShell. It deploys a CloudFormation stack called `athena-dsql` in a private mode with VPC endpoints and security groups.
@@ -279,21 +297,3 @@ There's no NAT gateway or internet route. Every interface endpoint must have pri
 3. The connector reads that catalog's secret (through the Secrets Manager endpoint) and connects to the cluster's PrivateLink hostname on port 5432 (database `postgres`, `sslmode=require`), using the current token as the password.
 4. DSQL checks the token's IAM signature and the cluster resource policy (connection must come from the VPC).
 5. The connector reads metadata and rows, pushes filters down to DSQL where it can, and returns results to Athena, through the spill bucket for large results.
-
-## CI/CD Pipeline
-
-The Lambda functions and the Glue job are tested and deployed automatically with GitHub Actions through two separate workflows.
-
-| Workflow                                                     | Deploys                                                              | Packaged as                   |
-| ------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- |
-| [`deploy-lambda.yaml`](.github/workflows/deploy-lambda.yaml) | Every `extract_*` and `transform_*` Lambda function                  | `.zip` uploaded to AWS Lambda |
-| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `transform_combine_airplane_hotel_destination_datasets` Glue job | Python script uploaded to S3  |
-| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `load_gold_layer` Glue job                                       | Python script uploaded to S3  |
-
-### Lambda pipeline (`deploy-lambda.yaml`)
-
-The Lambda workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
-
-### Glue job pipeline (`deploy-glue.yaml`)
-
-The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs so it has its own workflow.
