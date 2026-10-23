@@ -32,7 +32,7 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 
 - Which vacations depart in 7 days.
 - Which destinations are cheapest, based on a round-trip flight from Phoenix plus a week-long hotel stay.
-- The activities available at each destination and its vacation type.
+- The activities available at each destination.
 - The exchange rate, for international destinations.
 
 ## QuickSight Results
