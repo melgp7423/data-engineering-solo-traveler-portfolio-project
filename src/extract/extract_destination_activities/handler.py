@@ -47,8 +47,8 @@ class ExtractConfig:
         "national_park",
         "ski",
     )
-    area_radius_meters: int = 7000
-    places_limit: int = 500
+    area_radius_meters: int = 25000
+    places_limit: int = 1000
     max_pages: int = 10
     geocode_concurrency: int = 4
     lang: str = "en"
@@ -82,8 +82,8 @@ class ExtractConfig:
                 ).split(",")
                 if c.strip()
             ),
-            area_radius_meters=int(os.environ.get("AREA_RADIUS_METERS", "7000")),
-            places_limit=int(os.environ.get("PLACES_LIMIT", "500")),
+            area_radius_meters=int(os.environ.get("AREA_RADIUS_METERS", "25000")),
+            places_limit=int(os.environ.get("PLACES_LIMIT", "1000")),
             max_pages=int(os.environ.get("MAX_PAGES", "10")),
             geocode_concurrency=int(os.environ.get("GEOCODE_CONCURRENCY", "4")),
             lang=os.environ.get("PLACES_LANG", "en").strip().lower(),
@@ -109,7 +109,7 @@ class ExtractConfig:
             raise ValueError("CATEGORIES must list 1-100 Geoapify category keys")
         if not 0 < self.area_radius_meters <= 100000:
             raise ValueError("AREA_RADIUS_METERS must be between 1 and 100000")
-        if not 1 <= self.places_limit <= 500:
+        if not 1 <= self.places_limit <= 1000:
             raise ValueError("PLACES_LIMIT must be between 1 and 500")
         if self.max_pages < 1:
             raise ValueError("MAX_PAGES must be at least 1")
