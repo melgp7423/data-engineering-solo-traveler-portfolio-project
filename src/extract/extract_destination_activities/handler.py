@@ -24,7 +24,6 @@ logger.setLevel(logging.INFO)
 
 @dataclass(frozen=True)
 class ExtractConfig:
-    """Holds and validates all runtime settings."""
 
     geocode_url: str
     places_url: str
@@ -48,7 +47,7 @@ class ExtractConfig:
         "ski",
     )
     area_radius_meters: int = 25000
-    places_limit: int = 1000
+    places_limit: int = 500
     max_pages: int = 10
     geocode_concurrency: int = 4
     lang: str = "en"
@@ -83,7 +82,7 @@ class ExtractConfig:
                 if c.strip()
             ),
             area_radius_meters=int(os.environ.get("AREA_RADIUS_METERS", "25000")),
-            places_limit=int(os.environ.get("PLACES_LIMIT", "1000")),
+            places_limit=int(os.environ.get("PLACES_LIMIT", "500")),
             max_pages=int(os.environ.get("MAX_PAGES", "10")),
             geocode_concurrency=int(os.environ.get("GEOCODE_CONCURRENCY", "4")),
             lang=os.environ.get("PLACES_LANG", "en").strip().lower(),
@@ -127,13 +126,6 @@ class DestinationsNotFoundError(Exception):
 
 
 class DestinationLocator:
-    """
-    Decides which destination names to search:
-      * the "written" list in the event (the hotels Lambda's return value), or
-      * search_parameters.q of every hotel file in today's extract_date partition.
-    Only destinations whose hotel search succeeded are used, and older
-    partitions are ignored so the activities always match today's hotels.
-    """
 
     def __init__(
         self, bucket: str, prefix: str, client=None, today: Callable[[], date] = None
@@ -197,7 +189,6 @@ class DestinationLocator:
 
 
 class SecretProvider:
-    """Fetches (and caches) the API key from Secrets Manager."""
 
     def __init__(self, secret_id: str, client=None):
         self._secret_id = secret_id
@@ -231,7 +222,6 @@ class SecretProvider:
 
 
 class QueryParamKeyAuthenticator:
-    """Geoapify authenticates with ?apiKey=<key> on every request."""
 
     def __init__(self, secrets: SecretProvider, param_name: str = "apiKey"):
         self._secrets = secrets
@@ -530,14 +520,12 @@ class PlacesQueryBuilder:
 
 @dataclass(frozen=True)
 class ExtractRun:
-    """Identifies one execution."""
 
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class RawObjectKeyBuilder:
-    """Builds Hive-style partitioned keys for Glue/Athena."""
 
     def __init__(self, prefix: str):
         self._prefix = prefix.rstrip("/")
@@ -562,7 +550,6 @@ class RawObjectKeyBuilder:
 
 
 class S3RawWriter:
-    """Writes raw bytes to S3 unchanged."""
 
     def __init__(self, bucket: str, client=None):
         self._bucket = bucket
@@ -587,7 +574,6 @@ class ExtractError(Exception):
 
 
 class ExtractService:
-    """Coordinates geocode destinations -> per destination: build area -> page through places -> store."""
 
     def __init__(
         self,
@@ -622,12 +608,9 @@ class ExtractService:
             raise ExtractError(
                 f"None of the {len(names)} destinations could be geocoded: {names}"
             )
-        # Land the raw geocoding result too, so each destination's coordinates
-        # can be traced back to the API response they came from.
+
         geocode_key = self._writer.write(self._key_builder.geocode(run), geocoded.raw)
 
-        # One Places search per destination, so every place can be tagged with
-        # the hotel destination (search city) it was found for.
         page_keys, place_count = [], 0
         for destination in geocoded.destinations:
             keys, count = self._extract_destination(run, destination, overrides)
@@ -710,7 +693,6 @@ def build_locator(config: ExtractConfig) -> DestinationLocator:
 
 
 def build_service(config: ExtractConfig) -> ExtractService:
-    """Composition root: the only place that wires the pieces together."""
     client = GeoapifyClient(
         QueryParamKeyAuthenticator(SecretProvider(config.api_key_secret)),
         config.request_timeout,
@@ -746,9 +728,5 @@ def lambda_handler(event, context):
         _locator = build_locator(config)
         _service = build_service(config)
 
-    # Chained after the hotels Lambda in Step Functions, `event` is its output
-    # ({"written": [{"destination": ...}, ...]}); on a schedule it's empty and
-    # today's hotel files are used. Optional {"query_params": {...}} overrides
-    # fields of the Places POST body, e.g. {"categories": ["beach"]}.
     overrides = event.get("query_params", {}) if isinstance(event, dict) else {}
     return _service.run(_locator.locate(event), overrides)
