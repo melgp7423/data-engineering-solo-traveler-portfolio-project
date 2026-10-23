@@ -436,13 +436,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         .join(activity_country, on="city", how="left")
         .withColumn("known_country", known_city_map[F.col("city")])
         .withColumn(
-            "country_source",
-            F.when(F.col("hotel_country").isNotNull(), "hotel_search")
-            .when(F.col("activity_country").isNotNull(), "activities")
-            .when(F.col("known_country").isNotNull(), "known_city_list")
-            .otherwise("default"),
-        )
-        .withColumn(
             "country",
             F.coalesce(
                 "hotel_country",
@@ -515,7 +508,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         "city",
         "destination_name",
         "country",
-        "country_source",
         "local_currency",
         "local_per_usd",
         "fx_rate_date",
