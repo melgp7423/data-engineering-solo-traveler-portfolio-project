@@ -3,6 +3,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [QuickSight Results](#quicksight-results)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
 - [Project Structure](#project-structure)
@@ -33,6 +34,22 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 - Which destinations are cheapest, based on a round-trip flight from Phoenix plus a week-long hotel stay.
 - The activities available at each destination and its vacation type.
 - The exchange rate, for international destinations.
+
+## QuickSight Results
+
+![QuickSight Results](docs/images/Results_Cheapest_Vacations_Analysis.png)
+
+### Dashboard Overview
+
+This Amazon QuickSight dashboard presents travel cost data extracted on October 23, 2026. Flight and hotel rates reflect a departure/check-in date of October 30, 2026, and a return/check-out date of November 6, 2026, with Phoenix as the origin.
+
+### Map Visualizations
+
+Each destination is plotted as a point sized by its base vacation cost which includes a round-trip coach flight plus a week long stay at a 3, 4 or 5-star hotel. Larger markers indicate higher costs. Results are segmented by region so users can easily filter by personal preference, such as avoiding winter conditions in the eastern U.S.
+
+### Summary Tables
+
+The summary tables below the maps rank destinations by total cost in ascending order, identify the lowest-priced hotel that meets the selection criteria and list suggested activities for each location.
 
 ## Tech Stack
 
