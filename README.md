@@ -97,7 +97,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
    - Hotel room rates
    - Destination activities
 6. **Catalog** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog, so the raw data can be discovered and queried before it is transformed.
-7. **Data Quality Checks** Once each crawler has finished cataloging its data in the four bronze S3 buckets (Exchange Rates, Airplane Ticket Rates, Hotel Room Rates and Destination Activities), a dedicated data quality check runs against each dataset before the final transformation script executes.
+7. **Data Quality Checks** Once each crawler has finished cataloging its data in the four silver S3 buckets (Exchange Rates, Airplane Ticket Rates, Hotel Room Rates and Destination Activities), a dedicated data quality check runs against each dataset before the final transformation script executes.
 
    These checks are orchestrated through AWS Step Functions, which decouples orchestration from the processing logic. This keeps the pipeline easy to scale and maintain as new sources or rules are added.
 
@@ -114,9 +114,12 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
 8. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog.
 9. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket within the silver layer, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
-10. **Load → Gold** A load Glue job script reads the combined Parquet dataset metadata from the Glue Data Catalog and writes it into the gold layer. The gold layer consists of four Amazon Aurora Serverless clusters. Each cluster corresponds to a specific region and datasets are grouped by region based on each destinations latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
-11. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
-12. **Amazon Quick Sight** visualizes the results.
+
+10. **Final Data Quality Check** This data quality check runs against the combined dataset in the final silver-layer S3 bucket using a fail fast rule. Fail fast is used here because the combined dataset feeds directly into the Glue job that loads data into the gold layer which is organized into four clusters. A critical schema issue or data anomaly at this stage could corrupt the downstream analysis in the gold tier or cause records to be categorized into the wrong gold-layer cluster. These errors would propagate silently and be difficult to unwind once in the gold layer so stopping the pipeline is safer than continuing with bad data.
+
+11. **Load → Gold** A load Glue job script reads the combined Parquet dataset metadata from the Glue Data Catalog and writes it into the gold layer. The gold layer consists of four Amazon Aurora Serverless clusters. Each cluster corresponds to a specific region and datasets are grouped by region based on each destinations latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
+12. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
+13. **Amazon Quick Sight** visualizes the results.
 
 ## Project Structure
 
