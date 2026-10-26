@@ -95,11 +95,26 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
    - Hotel room rates
    - Destination activities
 6. **Catalog** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog, so the raw data can be discovered and queried before it is transformed.
-7. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog.
-8. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket within the silver layer, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
-9. **Load → Gold** A load Glue job script reads the combined Parquet dataset metadata from the Glue Data Catalog and writes it into the gold layer. The gold layer consists of four Amazon Aurora Serverless clusters. Each cluster corresponds to a specific region and datasets are grouped by region based on each destinations latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
-10. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
-11. **Amazon Quick Sight** visualizes the results.
+7. **Data Quality Checks** Once each crawler has finished cataloging its data in the four bronze S3 buckets (Exchange Rates, Airplane Ticket Rates, Hotel Room Rates and Destination Activities), a dedicated data quality check runs against each dataset before the final transformation script executes.
+
+   These checks are orchestrated through AWS Step Functions, which decouples orchestration from the processing logic. This keeps the pipeline easy to scale and maintain as new sources or rules are added.
+
+   Each dataset has its own response to a failed ruleset based on how much its data affects the final analysis.
+
+| Crawler                                    | On Failure                                         | Rationale                                                                                                                                                                                                   |
+| ------------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transform-exchange-rates-crawler`         | Log and continue                                   | The exchange rate API returns a very small dataset, so a failure has minimal impact downstream.                                                                                                             |
+| `transform-airplane-ticket-rates-crawler`  | Alert and continue if more than 5% of records fail | Ticket prices directly drive the trip cost calculations, so significant data loss needs visibility.                                                                                                         |
+| `transform-hotel-room-rates-crawler`       | Alert and continue if more than 5% of records fail | Hotel prices are the other direct input to the trip cost calculations.                                                                                                                                      |
+| `transform-destination-activities-crawler` | Log and continue                                   | This dataset is large but inherently messy. Because so many activities are extracted, a small number of bad records won't meaningfully affect the analysis and plenty of valid activities remain available. |
+
+<hr />
+
+8. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog.
+9. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket within the silver layer, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
+10. **Load → Gold** A load Glue job script reads the combined Parquet dataset metadata from the Glue Data Catalog and writes it into the gold layer. The gold layer consists of four Amazon Aurora Serverless clusters. Each cluster corresponds to a specific region and datasets are grouped by region based on each destinations latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
+11. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
+12. **Amazon Quick Sight** visualizes the results.
 
 ## Project Structure
 
