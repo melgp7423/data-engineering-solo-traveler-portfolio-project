@@ -83,7 +83,11 @@ Data moves through 3 layers, each one cleaner and more query-ready than the last
 
 Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
+### Architecture Diagram
+
 ![Data Engineering Architecture Diagram](docs/images/Data_Engineering_Diagram.svg)
+
+### ETL Workflow Steps
 
 1. **EventBridge** runs a daily schedule that starts the Step Functions workflow allowing the full ETL pipeline to run every morning.
 2. **API Gateway** exposes REST API endpoints to start the pipeline.
