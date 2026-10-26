@@ -43,7 +43,7 @@ The transformed data is loaded into the gold layer in Amazon Aurora Serverless a
 
 This Amazon QuickSight dashboard presents travel cost data extracted on October 23, 2026.
 
-Flight and hotel rates reflect a departure/check-in date of October 30, 2026, and a return/check-out date of November 6, 2026 with Phoenix set as the origin.
+Flight and hotel rates reflect a departure/check-in date of October 30, 2026 and a return/check-out date of November 6, 2026 with Phoenix set as the origin.
 
 ### Map Visualizations
 
@@ -78,6 +78,8 @@ Data moves through 3 layers, each one cleaner and more query-ready than the last
 | **Bronze** | Raw API responses, exactly as returned (one S3 bucket per source)                                      | JSON    |
 | **Silver** | Each source cleaned & standardized on its own (one S3 bucket per source + one combined S3 data bucket) | Parquet |
 | **Gold**   | Sources are grouped by region into four analytics-ready datasets (four Aurora Serverless clusters)     | Parquet |
+
+### Partitions
 
 Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
