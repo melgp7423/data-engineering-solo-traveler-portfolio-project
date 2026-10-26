@@ -125,7 +125,9 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 │       └── deploy-glue.yaml                                 # CI/CD for the Glue job
 ├── docs/
 │   └── images/
-│       └── Data_Engineering_Diagram.svg                     # README.md Architecture Diagram
+│       ├── Data_Engineering_Diagram.svg                     # README.md ETL Architecture Diagram
+│       ├── Athena_Aurora_Connector_Diagram.svg              # README.md Athena Aurora Federated Query Connector Diagram
+│       └── Results_Cheapest_Vacations_Analysis.png          # README.md QuickSight Visualization
 ├── src/
 │   ├── extract/                                             # API → bronze (raw JSON)
 │   │   ├── extract_exchange_rates/
