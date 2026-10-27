@@ -51,7 +51,7 @@ Each destination is plotted as a point sized by its base vacation cost which inc
 
 ### Summary Tables
 
-The summary tables below the maps rank destinations by total cost in ascending order, identify the lowest-priced hotel that meets the selection criteria and list suggested activities for each location.
+The summary tables below the maps rank destinations by total cost in ascending order, it identifies the lowest-priced hotel that meets the selection criteria and lists suggested activities for each location.
 
 ## Tech Stack
 
@@ -59,7 +59,8 @@ The summary tables below the maps rank destinations by total cost in ascending o
 - AWS Step Functions
 - Amazon API Gateway
 - AWS Lambda
-- AWS Glue PySpark Scripts
+- AWS Glue Jobs (PySpark)
+- AWS Glue Crawlers
 - AWS Glue Data Catalog
 - AWS Glue Data Quality
 - Amazon S3 (bronze and silver layer)
@@ -70,8 +71,7 @@ The summary tables below the maps rank destinations by total cost in ascending o
 
 ## Architecture
 
-The pipeline follows the medallion architecture.
-Data moves through 3 layers, each one cleaner and more query-ready than the last.
+The pipeline follows the medallion architecture moving data through 3 layers: bronze, silver and gold.
 
 | Layer      | What it holds                                                                                          | Format  |
 | ---------- | ------------------------------------------------------------------------------------------------------ | ------- |
@@ -92,18 +92,14 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 1. **EventBridge** runs a daily schedule that starts the Step Functions workflow allowing the full ETL pipeline to run every morning.
 2. **API Gateway** exposes REST API endpoints to start the pipeline.
 3. **Step Functions** orchestrates the ETL workflow.
-4. **Extract → Bronze** The extract Lambdas call each API and write the raw JSON responses to the bronze S3 buckets. The lambda functions are coordinated to run in parallel.
+4. **Extract → Bronze** The extract Lambdas call each API and write the raw JSON responses to the bronze S3 buckets. The Lambda functions are coordinated to run in parallel.
    - Exchange rates run on their own.
-   - Airplane ticket rates, hotel room rates and destination activities run in a chain. The hotels Lambda searches the destinations from the flight deals data and the destination activities Lambda searches the destinations data from the hotels.
+   - Airplane ticket rates, hotel room rates and destination activities run in a chain. The hotels Lambda searches the destinations from the airplane ticket rates data and the destination activities Lambda searches the destinations from the hotel room rates data.
 5. **Transform → Silver** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans all the data and writes the result as Parquet to that source's silver bucket.
-   - Exchange rates
-   - Airplane ticket rates
-   - Hotel room rates
-   - Destination activities
-6. **Catalog** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog, so the raw data can be discovered and queried before it is transformed.
+6. **Catalog** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog.
 7. **Data Quality Checks** Once each crawler has finished cataloging its data in the four silver S3 buckets (Exchange Rates, Airplane Ticket Rates, Hotel Room Rates and Destination Activities), a dedicated data quality check runs against each dataset before the final transformation script executes.
 
-   These checks are orchestrated through AWS Step Functions, which decouples orchestration from the processing logic. This keeps the pipeline easy to scale and maintain as new sources or rules are added.
+   These checks are orchestrated through AWS Step Functions to decouple orchestration from the processing logic. This keeps the pipeline easy to scale and maintain as new sources or rules are added.
 
    Each dataset has its own response to a failed ruleset based on how much its data affects the final analysis.
 
@@ -119,7 +115,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 8. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog.
 9. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket within the silver layer, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
 
-10. **Final Data Quality Check** This data quality check runs against the combined dataset in the final silver-layer S3 bucket using a fail fast rule. Fail fast is used here because the combined dataset feeds directly into the Glue job that loads data into the gold layer which is organized into four clusters. A critical schema issue or data anomaly at this stage could corrupt the downstream analysis in the gold tier or cause records to be categorized into the wrong gold-layer cluster. These errors would propagate silently and be difficult to unwind once in the gold layer so stopping the pipeline is safer than continuing with bad data.
+10. **Final Data Quality Check** This data quality check runs against the combined dataset in the final silver-layer S3 bucket using a fail fast rule. Fail fast is used here because the combined dataset feeds directly into the Glue job that loads data into the gold layer which is organized into four clusters. A critical schema issue or data anomaly at this stage could corrupt the downstream analysis in the gold layer or cause records to be categorized into the wrong gold layer cluster. These errors would propagate silently and be difficult to unwind once in the gold layer so stopping the pipeline is safer than continuing with bad data.
 
 11. **Load → Gold** A load Glue job script reads the combined Parquet dataset metadata from the Glue Data Catalog and writes it into the gold layer. The gold layer consists of four Amazon Aurora Serverless clusters. Each cluster corresponds to a specific region and datasets are grouped by region based on each destinations latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
 12. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
@@ -131,7 +127,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 ├── .github/
 │   └── workflows/
 │       ├── deploy-lambda.yaml                               # CI/CD for the Lambdas
-│       └── deploy-glue.yaml                                 # CI/CD for the Glue job
+│       └── deploy-glue.yaml                                 # CI/CD for the Glue jobs
 ├── docs/
 │   └── images/
 │       ├── Data_Engineering_Diagram.svg                     # README.md ETL Architecture Diagram
@@ -150,11 +146,11 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 │   │   ├── transform_destination_activities/
 │   │   └── transform_combine_airplane_hotel_destination_datasets/
 │   └── load/
-│       └── load_combined_dataset_aurora                     # silver → gold (Parquet)
+│       └── load_gold_layer                                  # silver → gold (Parquet)
 ├── tests/
 │   ├── extract/                                             # one test file per extract Lambda
-│   ├── transformation/                                      # one test file per transform Lambda
-│   └── load/                                                # one test file per load Lambda
+│   ├── transformation/                                      # one test file per transform Lambda & Glue job
+│   └── load/                                                # one test file per load Glue job
 ├── .gitignore
 └── README.md
 ```
@@ -273,7 +269,7 @@ Account-specific identifiers are never hard-coded. The deploy workflows read the
 
 ## CI/CD Pipeline
 
-The Lambda functions and the Glue job are tested and deployed automatically with GitHub Actions through two separate workflows.
+The Lambda functions and the Glue jobs are tested and deployed automatically with GitHub Actions through two separate workflows.
 
 | Workflow                                                     | Deploys                                                              | Packaged as                   |
 | ------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- |
@@ -287,7 +283,7 @@ The Lambda workflow only tests and redeploys the Lambdas whose code or tests cha
 
 ### Glue job pipeline (`deploy-glue.yaml`)
 
-The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs so it has its own workflow.
+The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs so these have its own workflow.
 
 ## Athena/Aurora DSQL Connector
 
