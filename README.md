@@ -8,7 +8,7 @@
 - [Data Sources](#data-sources)
 - [Architecture](#architecture)
 - [Security](#security)
-- [Athena/Aurora DSQL Connector](#athenaaurora-dsql-connector)
+- [Athena/Aurora Federated Query Connector](#athenaaurora-federated-query-connector)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
@@ -121,8 +121,6 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 | `transform-hotel-room-rates-crawler`       | Alert and continue if more than 5% of records fail | Hotel prices are the other direct input to the trip cost calculations.                                                                                                                                      |
 | `transform-destination-activities-crawler` | Log and continue                                   | This dataset is large but inherently messy. Because so many activities are extracted, a small number of bad records won't meaningfully affect the analysis and plenty of valid activities remain available. |
 
-<hr />
-
 8. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog.
 9. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket within the silver layer, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
 
@@ -149,7 +147,7 @@ The entire pipeline runs inside a dedicated VPC designed securely with high avai
 
 ### Security Groups
 
-- Separated into three tiers: web, app, and database.
+- Separated into three tiers: web, app and database
 - Inbound and outbound rules reference other security groups instead of IP addresses
 - Rules are fine-grained, allowing only the traffic each tier needs
 - NACLs are not used. Security groups fully meet the security requirements given the smaller scale of the ETL pipeline
@@ -188,7 +186,7 @@ The entire pipeline runs inside a dedicated VPC designed securely with high avai
 - VPC Flow Logs send all IP traffic records to CloudWatch
 - Data quality monitoring: A number of AWS Glue Data Quality checks in the silver layer are set to alert and continue on failure. A CloudWatch Alarm watches these failures and sends an SNS notification when a threshold is crossed, allowing data corruption is caught early.
 
-## Athena/Aurora DSQL Connector
+## Athena/Aurora Federated Query Connector
 
 Athena queries the four Aurora DSQL clusters live through a federated query connector. Everything is created by `setup-athena-dsql.sh` and is ran from AWS CloudShell. It deploys a CloudFormation stack called `athena-dsql` in a private mode with VPC endpoints and security groups.
 
@@ -374,6 +372,13 @@ Account-specific identifiers are never hard-coded. The deploy workflows read the
 | `extract_airplane_ticket_rates`,<br>`extract_hotel_room_rates`,<br>`transform_airplane_ticket_rates` | `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET`  |
 | `extract_hotel_room_rates`,<br>`extract_destination_activities`,<br>`transform_hotel_room_rates`     | `AWS_HOTEL_ROOM_RATES_S3_BUCKET`       |
 | `extract_destination_activities`,<br>`transform_destination_activities`                              | `AWS_DESTINATION_ACTIVITIES_S3_BUCKET` |
+| `transform_combine_airplane_hotel_destination_datasets`                                              | `OUTPUT_PATH` (Glue Job Parameter)     |
+
+#### Aurora Clusters
+
+| Used by           | Glue Job Parameters                                                                                                     |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `load_gold_layer` | `MX_NORTH_CLUSTER_ENDPOINT`,`MX_SOUTH_CLUSTER_ENDPOINT`,<br>`US_CA_EAST_CLUSTER_ENDPOINT`,`US_CA_WEST_CLUSTER_ENDPOINT` |
 
 #### Bucket Prefixes
 
