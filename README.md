@@ -5,13 +5,14 @@
 - [Overview](#overview)
 - [QuickSight Results](#quicksight-results)
 - [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
 - [Data Sources](#data-sources)
+- [Architecture](#architecture)
+- [Security](#security)
+- [Athena/Aurora DSQL Connector](#athenaaurora-dsql-connector)
+- [CI/CD Pipeline](#cicd-pipeline)
+- [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Setup](#setup)
-- [CI/CD Pipeline](#cicd-pipeline)
-- [Athena/Aurora DSQL Connector](#athenaaurora-dsql-connector)
 
 ## Overview
 
@@ -55,6 +56,7 @@ The summary tables below the maps rank destinations by total cost in ascending o
 
 ## Tech Stack
 
+- AWS VPC
 - Amazon EventBridge
 - AWS Step Functions
 - Amazon API Gateway
@@ -68,6 +70,15 @@ The summary tables below the maps rank destinations by total cost in ascending o
 - Amazon Athena
 - Amazon Quick Sight
 - GitHub Actions (CI/CD)
+
+## Data Sources
+
+| Data                    | Source                                                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| Currency exchange rates | [Free Currency API](https://freecurrencyapi.com/docs/)                                  |
+| Flight costs            | [SerpApi – Google Flights API](https://serpapi.com/google-flights-api)                  |
+| Hotel room costs        | [SerpApi – Google Hotels API](https://serpapi.com/google-hotels-api)                    |
+| Destination activities  | [Geoapify – Travel & Tourism APIs](https://www.geoapify.com/industries/travel-tourism/) |
 
 ## Architecture
 
@@ -121,6 +132,121 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 12. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
 13. **Amazon Quick Sight** visualizes the results.
 
+## Security
+
+### Network Security
+
+The entire pipeline runs inside a dedicated VPC designed securely with high availability, isolated security groups and cost optimized VPC endpoints.
+
+| Component           | Configuration                                                                                                                                             |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Availability**    | Spans 2 Availability Zones                                                                                                                                |
+| **Public subnets**  | Internet access via an Internet Gateway. Each hosts a NAT Gateway (one per AZ)                                                                            |
+| **Private subnets** | ETL workloads run here and off the public internet. Internet access goes through the NAT Gateways while inbound connections from the internet are blocked |
+| **VPC endpoints**   | S3 Gateway endpoints keep S3 traffic on the AWS network and reduce costs                                                                                  |
+
+<hr />
+
+### Security Groups
+
+- Separated into three tiers: web, app, and database.
+- Inbound and outbound rules reference other security groups instead of IP addresses
+- Rules are fine-grained, allowing only the traffic each tier needs
+- NACLs are not used. Security groups fully meet the security requirements given the smaller scale of the ETL pipeline
+
+### Data Encryption
+
+**Encryption at Rest**
+
+- All S3 buckets and Aurora DSQL clusters are configured to use SSE-S3 keys for the data to have encryption at rest
+
+**Encryption in Transit**
+
+- Lambda Functions: AWS automatically encrypts data in transit with TLS. Environment variables are additionally encrypted with dedicated KMS keys so their values stay secret while in transit.
+
+- AWS Glue: Data and job parameters are encrypted in transit with TLS. In order to keep sensitive parameters secret, AWS Secrets Manager is being used and passes the ARN of each secret into the jobs parameter.
+
+- Each S3 bucket and Aurora cluster has the IAM policy `aws:SecureTransport: true` attached to ensure all data coming to/from a database is encrypted via HTTPS or TLS. Any request that comes in through an HTTP connection will automatically be denied.
+
+<hr/>
+
+### Access Management & Secrets Management
+
+**Least-Privilege IAM Roles**
+
+- Each IAM role uses the principal of least privilege with granular permissions set to ensure that each role only has access to the resources it needs such as S3 buckets, Glue Crawlers, AWS Secrets, etc. Every permission is explicitly defined so no role has excessive permissions.
+
+**Secrets Management**
+
+- Secrets are never hardcoded and always stored/retrieved through Amazon Secrets Manager.
+
+<hr />
+
+### Auditing, Logging and Governance
+
+- AWS CloudTrail logs every API call and job event for compliance and auditing
+- VPC Flow Logs send all IP traffic records to CloudWatch
+- Data quality monitoring: A number of AWS Glue Data Quality checks in the silver layer are set to alert and continue on failure. A CloudWatch Alarm watches these failures and sends an SNS notification when a threshold is crossed, allowing data corruption is caught early.
+
+## Athena/Aurora DSQL Connector
+
+Athena queries the four Aurora DSQL clusters live through a federated query connector. Everything is created by `setup-athena-dsql.sh` and is ran from AWS CloudShell. It deploys a CloudFormation stack called `athena-dsql` in a private mode with VPC endpoints and security groups.
+
+The connector runs inside the VPC and uses only VPC endpoints via PrivateLink so traffic never crosses the internet and a cluster policy can reject any connection from outside the VPC.
+
+### Architecture (private mode)
+
+![Athena Aurora Connector Architecture Diagram](docs/images/Athena_Aurora_Connector_Diagram.svg)
+
+### Components
+
+| Component                                                                                                        | What it does                                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Athena data sources** `dsql_west`, `dsql_east`, `dsql_north`, `dsql_south`                                     | Catalogs of type `LAMBDA` that point Athena at the connector. Pick one in the query editor's Data source dropdown.                                                                                                                                                                                                                                                          |
+| **Connector Lambda** (`athena-dsql-ConnectorFunction-…`)                                                         | AWS's open-source Athena PostgreSQL connector (`PostGreSqlMuxCompositeHandler`, Java 17). DSQL speaks the PostgreSQL wire protocol, so the standard connector works. One function serves both catalogs via `dsql_west_connection_string` / `dsql_east_connection_string`. Needs `JAVA_TOOL_OPTIONS=--add-opens=java.base/java.nio=ALL-UNNAMED` for Apache Arrow on Java 17. |
+| **Secrets** `athena-dsql/dsql_west`, `athena-dsql/dsql_east`, `athena-dsql/dsql_north`, `athena-dsql/dsql_south` | Hold `{"username":"admin","password":"<IAM token>"}` per cluster. The connector reads them at connect time (cached about 60 s).                                                                                                                                                                                                                                             |
+| **Token refresher Lambda** + **EventBridge rule**                                                                | DSQL has no static passwords, only short-lived IAM auth tokens. Every 5 minutes this function generates a fresh `DbConnectAdmin` token that is valid 1 hour for each cluster's hostname and writes it into the secret.                                                                                                                                                      |
+| **Spill bucket**                                                                                                 | Private, encrypted S3 bucket for result sets too large to return directly. Objects expire after 1 day.                                                                                                                                                                                                                                                                      |
+| **Code bucket** `athena-dsql-code-<account>-<region>`                                                            | Holds the connector jar that Lambda loads.                                                                                                                                                                                                                                                                                                                                  |
+
+### Private networking
+
+| Resource                                               | Purpose                                                                                                                                                                                       |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Security group** `athena-dsql-connector`             | Attached to the connector Lambda. Outbound only; no inbound rules.                                                                                                                            |
+| **Security group** `athena-dsql-endpoints`             | Attached to endpoints the script creates. Allows TCP 443 and 5432 **only from** `athena-dsql-connector`.                                                                                      |
+| **DSQL interface endpoint**                            | Private connection to the clusters. The connector uses the PrivateLink hostname `<cluster-id>.<service-id>.<region>.on.aws`. The script adds the connector to this endpoint's security group. |
+| **Secrets Manager** and **Athena** interface endpoints | Let the connector read secrets and check query status privately.                                                                                                                              |
+| **S3 gateway endpoint**                                | Lets the connector write to the spill bucket privately.                                                                                                                                       |
+
+There's no NAT gateway or internet route. Every interface endpoint must have private DNS enabled; the script checks this and stops if it's off.
+
+### Request flow
+
+1. A query runs in Athena against `dsql_west`, `dsql_east`, `dsql_north`, `dsql_south`.
+2. Athena invokes the connector Lambda with the catalog name.
+3. The connector reads that catalog's secret (through the Secrets Manager endpoint) and connects to the cluster's PrivateLink hostname on port 5432 (database `postgres`, `sslmode=require`), using the current token as the password.
+4. DSQL checks the token's IAM signature and the cluster resource policy (connection must come from the VPC).
+5. The connector reads metadata and rows, pushes filters down to DSQL where it can, and returns results to Athena, through the spill bucket for large results.
+
+## CI/CD Pipeline
+
+The Lambda functions and the Glue jobs are tested and deployed automatically with GitHub Actions through two separate workflows.
+
+| Workflow                                                     | Deploys                                                              | Packaged as                   |
+| ------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- |
+| [`deploy-lambda.yaml`](.github/workflows/deploy-lambda.yaml) | Every `extract_*` and `transform_*` Lambda function                  | `.zip` uploaded to AWS Lambda |
+| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `transform_combine_airplane_hotel_destination_datasets` Glue job | Python script uploaded to S3  |
+| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `load_gold_layer` Glue job                                       | Python script uploaded to S3  |
+
+### Lambda pipeline (`deploy-lambda.yaml`)
+
+The Lambda workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
+
+### Glue job pipeline (`deploy-glue.yaml`)
+
+The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs so these have its own workflow.
+
 ## Project Structure
 
 ```
@@ -154,15 +280,6 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 ├── .gitignore
 └── README.md
 ```
-
-## Data Sources
-
-| Data                    | Source                                                                                  |
-| ----------------------- | --------------------------------------------------------------------------------------- |
-| Currency exchange rates | [Free Currency API](https://freecurrencyapi.com/docs/)                                  |
-| Flight costs            | [SerpApi – Google Flights API](https://serpapi.com/google-flights-api)                  |
-| Hotel room costs        | [SerpApi – Google Hotels API](https://serpapi.com/google-hotels-api)                    |
-| Destination activities  | [Geoapify – Travel & Tourism APIs](https://www.geoapify.com/industries/travel-tourism/) |
 
 ## Getting Started
 
@@ -266,62 +383,3 @@ Account-specific identifiers are never hard-coded. The deploy workflows read the
 | `TRANSFORMED_PREFIX`  | every `transform_*` Lambda                 | Folder above `extract_date=` for that source's Parquet output                         |
 | `FLIGHT_DEALS_PREFIX` | `extract_hotel_room_rates`                 | Raw prefix of the airplane ticket rates data in `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET` |
 | `HOTEL_PREFIX`        | `extract_destination_activities`           | Raw prefix of the hotel room rates data in `AWS_HOTEL_ROOM_RATES_S3_BUCKET`           |
-
-## CI/CD Pipeline
-
-The Lambda functions and the Glue jobs are tested and deployed automatically with GitHub Actions through two separate workflows.
-
-| Workflow                                                     | Deploys                                                              | Packaged as                   |
-| ------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- |
-| [`deploy-lambda.yaml`](.github/workflows/deploy-lambda.yaml) | Every `extract_*` and `transform_*` Lambda function                  | `.zip` uploaded to AWS Lambda |
-| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `transform_combine_airplane_hotel_destination_datasets` Glue job | Python script uploaded to S3  |
-| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `load_gold_layer` Glue job                                       | Python script uploaded to S3  |
-
-### Lambda pipeline (`deploy-lambda.yaml`)
-
-The Lambda workflow only tests and redeploys the Lambdas whose code or tests changed, so a change to one function never touches the others.
-
-### Glue job pipeline (`deploy-glue.yaml`)
-
-The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_layer` steps run as AWS Glue jobs so these have its own workflow.
-
-## Athena/Aurora DSQL Connector
-
-Athena queries the four Aurora DSQL clusters live through a federated query connector. Everything is created by `setup-athena-dsql.sh` and is ran from AWS CloudShell. It deploys a CloudFormation stack called `athena-dsql` in a private mode with VPC endpoints and security groups.
-
-The connector runs inside the VPC and uses only VPC endpoints via PrivateLink so traffic never crosses the internet and a cluster policy can reject any connection from outside the VPC.
-
-### Architecture (private mode)
-
-![Athena Aurora Connector Architecture Diagram](docs/images/Athena_Aurora_Connector_Diagram.svg)
-
-### Components
-
-| Component                                                                                                        | What it does                                                                                                                                                                                                                                                                                                                                                                |
-| ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Athena data sources** `dsql_west`, `dsql_east`, `dsql_north`, `dsql_south`                                     | Catalogs of type `LAMBDA` that point Athena at the connector. Pick one in the query editor's Data source dropdown.                                                                                                                                                                                                                                                          |
-| **Connector Lambda** (`athena-dsql-ConnectorFunction-…`)                                                         | AWS's open-source Athena PostgreSQL connector (`PostGreSqlMuxCompositeHandler`, Java 17). DSQL speaks the PostgreSQL wire protocol, so the standard connector works. One function serves both catalogs via `dsql_west_connection_string` / `dsql_east_connection_string`. Needs `JAVA_TOOL_OPTIONS=--add-opens=java.base/java.nio=ALL-UNNAMED` for Apache Arrow on Java 17. |
-| **Secrets** `athena-dsql/dsql_west`, `athena-dsql/dsql_east`, `athena-dsql/dsql_north`, `athena-dsql/dsql_south` | Hold `{"username":"admin","password":"<IAM token>"}` per cluster. The connector reads them at connect time (cached about 60 s).                                                                                                                                                                                                                                             |
-| **Token refresher Lambda** + **EventBridge rule**                                                                | DSQL has no static passwords, only short-lived IAM auth tokens. Every 5 minutes this function generates a fresh `DbConnectAdmin` token that is valid 1 hour for each cluster's hostname and writes it into the secret.                                                                                                                                                      |
-| **Spill bucket**                                                                                                 | Private, encrypted S3 bucket for result sets too large to return directly. Objects expire after 1 day.                                                                                                                                                                                                                                                                      |
-| **Code bucket** `athena-dsql-code-<account>-<region>`                                                            | Holds the connector jar that Lambda loads.                                                                                                                                                                                                                                                                                                                                  |
-
-### Private networking
-
-| Resource                                               | Purpose                                                                                                                                                                                       |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Security group** `athena-dsql-connector`             | Attached to the connector Lambda. Outbound only; no inbound rules.                                                                                                                            |
-| **Security group** `athena-dsql-endpoints`             | Attached to endpoints the script creates. Allows TCP 443 and 5432 **only from** `athena-dsql-connector`.                                                                                      |
-| **DSQL interface endpoint**                            | Private connection to the clusters. The connector uses the PrivateLink hostname `<cluster-id>.<service-id>.<region>.on.aws`. The script adds the connector to this endpoint's security group. |
-| **Secrets Manager** and **Athena** interface endpoints | Let the connector read secrets and check query status privately.                                                                                                                              |
-| **S3 gateway endpoint**                                | Lets the connector write to the spill bucket privately.                                                                                                                                       |
-
-There's no NAT gateway or internet route. Every interface endpoint must have private DNS enabled; the script checks this and stops if it's off.
-
-### Request flow
-
-1. A query runs in Athena against `dsql_west`, `dsql_east`, `dsql_north`, `dsql_south`.
-2. Athena invokes the connector Lambda with the catalog name.
-3. The connector reads that catalog's secret (through the Secrets Manager endpoint) and connects to the cluster's PrivateLink hostname on port 5432 (database `postgres`, `sslmode=require`), using the current token as the password.
-4. DSQL checks the token's IAM signature and the cluster resource policy (connection must come from the VPC).
-5. The connector reads metadata and rows, pushes filters down to DSQL where it can, and returns results to Athena, through the spill bucket for large results.
