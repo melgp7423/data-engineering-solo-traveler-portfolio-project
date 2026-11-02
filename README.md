@@ -143,7 +143,11 @@ The entire pipeline runs inside a dedicated VPC designed securely with high avai
 | **Private subnets** | ETL workloads run here and off the public internet. Internet access goes through the NAT Gateways while inbound connections from the internet are blocked |
 | **VPC endpoints**   | S3 Gateway endpoints keep S3 traffic on the AWS network and reduce costs                                                                                  |
 
-<hr />
+### VPC Architecture Diagram
+
+_Note: No Load Balancer was used to optimize on cost savings due to only one person using this ETL pipeline. Two AZ's were configured in production mode in order to create a pipeline with high availability, but only one AZ was configured and used during the development phase to further optimize cost savings._
+
+![VPC Architecture Diagram](docs/images/VPC_Architecture_Diagram.svg)
 
 ### Security Groups
 
@@ -151,6 +155,8 @@ The entire pipeline runs inside a dedicated VPC designed securely with high avai
 - Inbound and outbound rules reference other security groups instead of IP addresses
 - Rules are fine-grained, allowing only the traffic each tier needs
 - NACLs are not used. Security groups fully meet the security requirements given the smaller scale of the ETL pipeline
+
+<hr />
 
 ### Data Encryption
 
