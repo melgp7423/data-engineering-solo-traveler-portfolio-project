@@ -154,7 +154,7 @@ _Note: No Load Balancer was used to optimize on cost savings due to only one per
 - Separated into three tiers: web, app and database
 - Inbound and outbound rules reference other security groups instead of IP addresses
 - Rules are fine-grained, allowing only the traffic each tier needs
-- NACLs are not used. Security groups fully meet the security requirements given the smaller scale of the ETL pipeline
+- NACLs are used minimally for configuring inbound and outbound traffic rules for each subnet. Security Groups meet most of the security requirements given the smaller scale of the ETL pipeline.
 
 <hr />
 
