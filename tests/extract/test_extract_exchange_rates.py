@@ -28,6 +28,7 @@ from extract.extract_exchange_rates.handler import (
     build_service,
 )
 
+API_BASE_URL = "https://api.freecurrencyapi.com/v1"
 BUCKET = "travel-bucket"
 RAW_PREFIX = "raw/exchange_rates/"
 ENDPOINT = "https://api.freecurrencyapi.com/v1/latest"
@@ -115,7 +116,7 @@ def http_error(code, body=b"", headers=None):
 
 def config(**overrides):
     values = dict(
-        api_base_url="https://api.freecurrencyapi.com/v1",
+        api_base_url=API_BASE_URL,
         api_endpoint="latest",
         access_key_secret="secret",
         aws_exchange_rates_s3_bucket=BUCKET,
@@ -162,6 +163,7 @@ def test_config_rejects_missing_or_placeholder_values(field, env_name, value):
 
 
 def test_config_from_env_normalises_values(monkeypatch):
+    monkeypatch.setenv("API_BASE_URL", API_BASE_URL)
     monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", f" {BUCKET} ")
     monkeypatch.setenv("RAW_PREFIX", f" {RAW_PREFIX} ")
     monkeypatch.setenv("BASE_CURRENCY", " eur ")
@@ -178,9 +180,9 @@ def test_config_from_env_normalises_values(monkeypatch):
 
 
 def test_config_from_env_uses_defaults(monkeypatch):
+    monkeypatch.setenv("API_BASE_URL", API_BASE_URL)
     monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", BUCKET)
     for name in (
-        "API_BASE_URL",
         "API_ENDPOINT",
         "ACCESS_KEY_SECRET",
         "RAW_PREFIX",
@@ -192,7 +194,7 @@ def test_config_from_env_uses_defaults(monkeypatch):
 
     cfg = ExtractConfig.from_env()
 
-    assert cfg.api_base_url == "https://api.freecurrencyapi.com/v1"
+    assert cfg.api_base_url == API_BASE_URL
     assert cfg.api_endpoint == "latest"
     assert cfg.access_key_secret == "prod/travelProject/exchangeRatesApi"
     assert cfg.raw_prefix == ""
@@ -202,8 +204,16 @@ def test_config_from_env_uses_defaults(monkeypatch):
 
 
 def test_config_from_env_requires_bucket(monkeypatch):
+    monkeypatch.setenv("API_BASE_URL", API_BASE_URL)
     monkeypatch.delenv("AWS_EXCHANGE_RATES_S3_BUCKET", raising=False)
     with pytest.raises(ValueError, match="AWS_EXCHANGE_RATES_S3_BUCKET"):
+        ExtractConfig.from_env()
+
+
+def test_config_from_env_requires_api_base_url(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", BUCKET)
+    monkeypatch.delenv("API_BASE_URL", raising=False)
+    with pytest.raises(ValueError, match="API_BASE_URL"):
         ExtractConfig.from_env()
 
 
@@ -438,6 +448,7 @@ def test_build_service_wires_config(monkeypatch):
 
 
 def test_lambda_handler_builds_once_and_passes_overrides(monkeypatch):
+    monkeypatch.setenv("API_BASE_URL", API_BASE_URL)
     monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", BUCKET)
     built = []
 
