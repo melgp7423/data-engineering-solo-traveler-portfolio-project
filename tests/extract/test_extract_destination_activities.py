@@ -36,6 +36,9 @@ from extract.extract_destination_activities.handler import (
     build_service,
 )
 
+GEOCODE_SEARCH_URL = "https://api.geoapify.com/v1/geocode/search"
+PLACES_URL = "https://api.geoapify.com/v2/places"
+
 
 class FakeGeoapify:
 
@@ -118,6 +121,11 @@ def config(**overrides):
     )
     values.update(overrides)
     return ExtractConfig(**values)
+
+
+def set_api_urls(monkeypatch):
+    monkeypatch.setenv("GEOCODE_SEARCH_URL", GEOCODE_SEARCH_URL)
+    monkeypatch.setenv("PLACES_URL", PLACES_URL)
 
 
 def test_locator_uses_hotel_lambda_output_and_dedupes():
@@ -447,6 +455,7 @@ MAX_PLACES_LIMIT = 500  # Geoapify returns 400 Bad Request above this
 
 
 def test_config_places_limit_defaults_to_at_most_500(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
     monkeypatch.delenv("PLACES_LIMIT", raising=False)
@@ -467,6 +476,7 @@ def test_config_rejects_places_limit_out_of_range():
 
 
 def test_config_from_env_rejects_places_limit_above_500(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
     monkeypatch.setenv("PLACES_LIMIT", str(MAX_PLACES_LIMIT + 1))
@@ -481,22 +491,36 @@ def test_places_query_sends_limit_of_at_most_500():
 
 
 def test_config_from_env_uses_synchronous_geocoding_defaults(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
     monkeypatch.setenv(
         "GEOCODE_URL", "https://api.geoapify.com/v1/batch/geocode/search"
     )
-    for name in ("GEOCODE_SEARCH_URL", "GEOCODE_CONCURRENCY", "REQUEST_TIMEOUT"):
+    for name in ("GEOCODE_CONCURRENCY", "REQUEST_TIMEOUT"):
         monkeypatch.delenv(name, raising=False)
 
     cfg = ExtractConfig.from_env()
 
-    assert cfg.geocode_url == "https://api.geoapify.com/v1/geocode/search"
+    assert cfg.geocode_url == GEOCODE_SEARCH_URL
+    assert cfg.places_url == PLACES_URL
     assert cfg.geocode_concurrency == 4
     assert cfg.request_timeout == 30
 
 
+@pytest.mark.parametrize("name", ["GEOCODE_SEARCH_URL", "PLACES_URL"])
+def test_config_from_env_requires_api_urls(monkeypatch, name):
+    set_api_urls(monkeypatch)
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
+    monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(ValueError, match=name):
+        ExtractConfig.from_env()
+
+
 def test_config_from_env_reads_geocode_overrides(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
     monkeypatch.setenv("GEOCODE_SEARCH_URL", "https://geo/custom")
@@ -509,6 +533,7 @@ def test_config_from_env_reads_geocode_overrides(monkeypatch):
 
 
 def test_config_from_env_reads_renamed_bucket_variables(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", " travel-bucket ")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", " travel-bucket ")
 
@@ -519,6 +544,7 @@ def test_config_from_env_reads_renamed_bucket_variables(monkeypatch):
 
 
 def test_config_from_env_ignores_old_raw_data_bucket_variables(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.delenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", raising=False)
     monkeypatch.delenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", raising=False)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_RAW_DATA_S3_BUCKET", "hotels")
@@ -532,6 +558,7 @@ def test_config_from_env_ignores_old_raw_data_bucket_variables(monkeypatch):
 
 
 def test_config_from_env_reads_raw_prefix(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "travel-bucket")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "travel-bucket")
     monkeypatch.setenv("RAW_PREFIX", " raw/destination_activities/ ")
@@ -542,6 +569,7 @@ def test_config_from_env_reads_raw_prefix(monkeypatch):
 
 
 def test_config_from_env_raw_prefix_defaults_to_empty(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "travel-bucket")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "travel-bucket")
     monkeypatch.delenv("RAW_PREFIX", raising=False)
@@ -748,6 +776,7 @@ def test_build_service_writes_to_destination_activities_bucket(monkeypatch):
 
 
 def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
+    set_api_urls(monkeypatch)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
     monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
     built = []
