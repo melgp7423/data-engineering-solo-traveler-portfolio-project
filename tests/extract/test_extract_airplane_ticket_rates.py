@@ -186,6 +186,7 @@ def test_config_allows_departing_today():
 
 
 def test_config_from_env_normalises_values(monkeypatch):
+    monkeypatch.setenv("API_URL", f" {API_URL} ")
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", f" {BUCKET} ")
     monkeypatch.setenv("RAW_PREFIX", f" {RAW_PREFIX} ")
     monkeypatch.setenv("DEPARTURE_ID", " jfk ")
@@ -197,6 +198,7 @@ def test_config_from_env_normalises_values(monkeypatch):
 
     cfg = ExtractConfig.from_env()
 
+    assert cfg.api_url == API_URL
     assert cfg.aws_airplane_ticket_rates_s3_bucket == BUCKET
     assert cfg.raw_prefix == RAW_PREFIX
     assert cfg.departure_id == "JFK"
@@ -208,9 +210,9 @@ def test_config_from_env_normalises_values(monkeypatch):
 
 
 def test_config_from_env_uses_defaults(monkeypatch):
+    monkeypatch.setenv("API_URL", API_URL)
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", BUCKET)
     for name in (
-        "API_URL",
         "API_KEY_SECRET",
         "RAW_PREFIX",
         "DEPARTURE_ID",
@@ -236,12 +238,21 @@ def test_config_from_env_uses_defaults(monkeypatch):
 
 
 def test_config_from_env_requires_bucket(monkeypatch):
+    monkeypatch.setenv("API_URL", API_URL)
     monkeypatch.delenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", raising=False)
     with pytest.raises(ValueError, match="AWS_AIRPLANE_TICKET_RATES_S3_BUCKET"):
         ExtractConfig.from_env()
 
 
+def test_config_from_env_requires_api_url(monkeypatch):
+    monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", BUCKET)
+    monkeypatch.delenv("API_URL", raising=False)
+    with pytest.raises(ValueError, match="API_URL"):
+        ExtractConfig.from_env()
+
+
 def test_config_from_env_validates_numbers(monkeypatch):
+    monkeypatch.setenv("API_URL", API_URL)
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", BUCKET)
     monkeypatch.setenv("ADULTS", "0")
     with pytest.raises(ValueError, match="ADULTS"):
@@ -489,6 +500,7 @@ def test_build_service_wires_config(monkeypatch):
 
 
 def test_lambda_handler_builds_once_and_passes_overrides(monkeypatch):
+    monkeypatch.setenv("API_URL", API_URL)
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", BUCKET)
     built = []
 
