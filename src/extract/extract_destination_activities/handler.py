@@ -56,12 +56,8 @@ class ExtractConfig:
     @classmethod
     def from_env(cls) -> "ExtractConfig":
         config = cls(
-            geocode_url=os.environ.get(
-                "GEOCODE_SEARCH_URL", "https://api.geoapify.com/v1/geocode/search"
-            ),
-            places_url=os.environ.get(
-                "PLACES_URL", "https://api.geoapify.com/v2/places"
-            ),
+            geocode_url=os.environ.get("GEOCODE_SEARCH_URL", ""),
+            places_url=os.environ.get("PLACES_URL", ""),
             api_key_secret=os.environ.get(
                 "API_KEY_SECRET", "prod/travelProject/geoapify"
             ),
