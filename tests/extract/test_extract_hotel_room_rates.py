@@ -39,6 +39,7 @@ from extract.extract_hotel_room_rates.handler import (
     build_service,
 )
 
+API_URL = "https://serpapi.com/search.json"
 BUCKET = "travel-bucket"
 FLIGHT_DEALS_PREFIX = "raw/airplane_ticket_rates/"
 RAW_PREFIX = "raw/hotel_room_rates/"
@@ -156,6 +157,7 @@ def config(**overrides):
 
 
 def set_required_env(monkeypatch):
+    monkeypatch.setenv("API_URL", API_URL)
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", BUCKET)
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", BUCKET)
 
@@ -208,6 +210,7 @@ def test_config_rejects_bad_numbers():
 
 
 def test_config_from_env_reads_renamed_variables(monkeypatch):
+    monkeypatch.setenv("API_URL", f" {API_URL} ")
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", f" {BUCKET} ")
     monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", f" {BUCKET} ")
     monkeypatch.setenv("FLIGHT_DEALS_PREFIX", f" {FLIGHT_DEALS_PREFIX} ")
@@ -217,6 +220,7 @@ def test_config_from_env_reads_renamed_variables(monkeypatch):
 
     cfg = ExtractConfig.from_env()
 
+    assert cfg.api_url == API_URL
     assert cfg.aws_airplane_ticket_rates_s3_bucket == BUCKET
     assert cfg.aws_hotel_room_rates_s3_bucket == BUCKET
     assert cfg.flight_deals_prefix == FLIGHT_DEALS_PREFIX
@@ -239,7 +243,6 @@ def test_config_from_env_prefixes_default_to_empty(monkeypatch):
 def test_config_from_env_uses_defaults(monkeypatch):
     set_required_env(monkeypatch)
     for name in (
-        "API_URL",
         "API_KEY_SECRET",
         "MAX_DESTINATIONS",
         "CHECK_IN_OFFSET_DAYS",
@@ -253,7 +256,7 @@ def test_config_from_env_uses_defaults(monkeypatch):
 
     cfg = ExtractConfig.from_env()
 
-    assert cfg.api_url == "https://serpapi.com/search.json"
+    assert cfg.api_url == API_URL
     assert cfg.api_key_secret == "prod/travelProject/serpApi"
     assert cfg.max_destinations == 50
     assert (cfg.check_in_offset_days, cfg.check_out_offset_days) == (7, 14)
@@ -263,7 +266,15 @@ def test_config_from_env_uses_defaults(monkeypatch):
     assert cfg.request_timeout == 60
 
 
+def test_config_from_env_requires_api_url(monkeypatch):
+    set_required_env(monkeypatch)
+    monkeypatch.delenv("API_URL", raising=False)
+    with pytest.raises(ValueError, match="API_URL"):
+        ExtractConfig.from_env()
+
+
 def test_config_from_env_ignores_old_raw_data_bucket_variables(monkeypatch):
+    monkeypatch.setenv("API_URL", API_URL)
     monkeypatch.delenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", raising=False)
     monkeypatch.delenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", raising=False)
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RAW_DATA_S3_BUCKET", "flights")
