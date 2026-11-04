@@ -37,7 +37,7 @@ class ExtractConfig:
     @classmethod
     def from_env(cls) -> "ExtractConfig":
         config = cls(
-            api_url=os.environ.get("API_URL", "https://serpapi.com/search.json"),
+            api_url=os.environ.get("API_URL", "").strip(),
             api_key_secret=os.environ.get(
                 "API_KEY_SECRET", "prod/travelProject/serpApi"
             ),
