@@ -31,7 +31,7 @@ class ExtractConfig:
     @classmethod
     def from_env(cls) -> "ExtractConfig":
         config = cls(
-            api_base_url=os.environ.get("API_BASE_URL", ""),
+            api_base_url=os.environ.get("API_BASE_URL", "").strip(),
             api_endpoint=os.environ.get("API_ENDPOINT", "latest"),
             access_key_secret=os.environ.get(
                 "ACCESS_KEY_SECRET", "prod/travelProject/exchangeRatesApi"
