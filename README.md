@@ -141,7 +141,7 @@ The entire pipeline runs inside a dedicated VPC designed securely with high avai
 | **Availability**    | Spans 2 Availability Zones                                                                                                                                |
 | **Public subnets**  | Internet access via an Internet Gateway. Each hosts a NAT Gateway (one per AZ)                                                                            |
 | **Private subnets** | ETL workloads run here and off the public internet. Internet access goes through the NAT Gateways while inbound connections from the internet are blocked |
-| **VPC endpoints**   | S3 Gateway endpoints keep S3 traffic on the AWS network and reduce costs                                                                                  |
+| **VPC endpoints**   | S3 Gateway and Aurora DSQL endpoints keep all traffic on the AWS network while reducing costs                                                             |
 
 ### VPC Architecture Diagram
 
@@ -179,6 +179,10 @@ _Note: No Load Balancer was used to optimize on cost savings due to only one per
 **S3 Bucket Policies**
 
 - Bucket policies have been attached to each S3 bucket within the pipeline in order to deny any traffic to the bucket unless it comes directly from the VPC.
+
+**Aurora DSQL Cluster Policies**
+
+- Aurora DSQL clusters have policies attached to them that block all connections coming from the public internet. Although the entire ETL is set up in one region, this policy has been set up as a multi-region cluster policy to specify a specific VPC that is able to connect to these clusters in order to maintain ETL scalability.
 
 **Least-Privilege IAM Roles**
 
