@@ -176,6 +176,10 @@ _Note: No Load Balancer was used to optimize on cost savings due to only one per
 
 ### Access Management & Secrets Management
 
+**S3 Bucket Policies**
+
+- Bucket policies have been attached to each S3 bucket within the pipeline in order to deny any traffic to the bucket unless it comes directly from the VPC.
+
 **Least-Privilege IAM Roles**
 
 - Each IAM role uses the principal of least privilege with granular permissions set to ensure that each role only has access to the resources it needs such as S3 buckets, Glue Crawlers, AWS Secrets, etc. Every permission is explicitly defined so no role has excessive permissions.
