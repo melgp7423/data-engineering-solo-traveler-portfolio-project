@@ -39,7 +39,7 @@ class ExtractConfig:
         config = cls(
             api_url=os.environ.get("API_URL", "").strip(),
             api_key_secret=os.environ.get(
-                "API_KEY_SECRET", "prod/travelProject/serpApi"
+                "API_KEY_SECRET", "".strip()
             ),
             aws_airplane_ticket_rates_s3_bucket=os.environ.get(
                 "AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", ""
