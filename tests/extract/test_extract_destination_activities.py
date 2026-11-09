@@ -109,6 +109,16 @@ def ok(payload, status=200):
     return HttpResponse(status, json.dumps(payload).encode())
 
 
+SECRET_NAME = "test/travelProject/geoapify"
+
+
+@pytest.fixture(autouse=True)
+def secret_name_env(monkeypatch):
+    # The Secrets Manager secret name has no hardcoded default; it must come
+    # from the API_KEY_SECRET environment variable.
+    monkeypatch.setenv("API_KEY_SECRET", SECRET_NAME)
+
+
 def config(**overrides):
     values = dict(
         geocode_url="https://geo/search",
@@ -516,6 +526,15 @@ def test_config_from_env_requires_api_urls(monkeypatch, name):
     monkeypatch.delenv(name, raising=False)
 
     with pytest.raises(ValueError, match=name):
+        ExtractConfig.from_env()
+
+
+def test_config_from_env_requires_secret_name(monkeypatch):
+    set_api_urls(monkeypatch)
+    monkeypatch.setenv("AWS_HOTEL_ROOM_RATES_S3_BUCKET", "hotels")
+    monkeypatch.setenv("AWS_DESTINATION_ACTIVITIES_S3_BUCKET", "raw-bucket")
+    monkeypatch.delenv("API_KEY_SECRET", raising=False)
+    with pytest.raises(ValueError, match="API_KEY_SECRET"):
         ExtractConfig.from_env()
 
 

@@ -36,6 +36,16 @@ API_URL = "https://serpapi.com/search.json"
 TODAY = date(2026, 10, 5)
 
 
+SECRET_NAME = "test/travelProject/serpApi"
+
+
+@pytest.fixture(autouse=True)
+def secret_name_env(monkeypatch):
+    # The Secrets Manager secret name has no hardcoded default; it must come
+    # from the API_KEY_SECRET environment variable.
+    monkeypatch.setenv("API_KEY_SECRET", SECRET_NAME)
+
+
 class FakeSecrets:
     def __init__(self, secret_string):
         self._secret_string = secret_string
@@ -213,7 +223,6 @@ def test_config_from_env_uses_defaults(monkeypatch):
     monkeypatch.setenv("API_URL", API_URL)
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", BUCKET)
     for name in (
-        "API_KEY_SECRET",
         "RAW_PREFIX",
         "DEPARTURE_ID",
         "OUTBOUND_OFFSET_DAYS",
@@ -227,7 +236,7 @@ def test_config_from_env_uses_defaults(monkeypatch):
     cfg = ExtractConfig.from_env()
 
     assert cfg.api_url == API_URL
-    assert cfg.api_key_secret == "prod/travelProject/serpApi"
+    assert cfg.api_key_secret == SECRET_NAME
     assert cfg.raw_prefix == ""
     assert cfg.departure_id == "PHX"
     assert cfg.outbound_offset_days == 7
@@ -248,6 +257,14 @@ def test_config_from_env_requires_api_url(monkeypatch):
     monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", BUCKET)
     monkeypatch.delenv("API_URL", raising=False)
     with pytest.raises(ValueError, match="API_URL"):
+        ExtractConfig.from_env()
+
+
+def test_config_from_env_requires_secret_name(monkeypatch):
+    monkeypatch.setenv("API_URL", API_URL)
+    monkeypatch.setenv("AWS_AIRPLANE_TICKET_RATES_S3_BUCKET", BUCKET)
+    monkeypatch.delenv("API_KEY_SECRET", raising=False)
+    with pytest.raises(ValueError, match="API_KEY_SECRET"):
         ExtractConfig.from_env()
 
 

@@ -35,6 +35,16 @@ ENDPOINT = "https://api.freecurrencyapi.com/v1/latest"
 RATES = {"CAD": 1.4257001775, "MXN": 18.3700024185, "USD": 1}
 
 
+SECRET_NAME = "test/travelProject/exchangeRatesApi"
+
+
+@pytest.fixture(autouse=True)
+def secret_name_env(monkeypatch):
+    # The Secrets Manager secret name has no hardcoded default; it must come
+    # from the ACCESS_KEY_SECRET environment variable.
+    monkeypatch.setenv("ACCESS_KEY_SECRET", SECRET_NAME)
+
+
 class FakeSecrets:
     def __init__(self, secret_string):
         self._secret_string = secret_string
@@ -184,7 +194,6 @@ def test_config_from_env_uses_defaults(monkeypatch):
     monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", BUCKET)
     for name in (
         "API_ENDPOINT",
-        "ACCESS_KEY_SECRET",
         "RAW_PREFIX",
         "BASE_CURRENCY",
         "CURRENCIES",
@@ -196,7 +205,7 @@ def test_config_from_env_uses_defaults(monkeypatch):
 
     assert cfg.api_base_url == API_BASE_URL
     assert cfg.api_endpoint == "latest"
-    assert cfg.access_key_secret == "prod/travelProject/exchangeRatesApi"
+    assert cfg.access_key_secret == SECRET_NAME
     assert cfg.raw_prefix == ""
     assert cfg.base_currency == "USD"
     assert cfg.currencies == "CAD,MXN,USD"
@@ -214,6 +223,14 @@ def test_config_from_env_requires_api_base_url(monkeypatch):
     monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", BUCKET)
     monkeypatch.delenv("API_BASE_URL", raising=False)
     with pytest.raises(ValueError, match="API_BASE_URL"):
+        ExtractConfig.from_env()
+
+
+def test_config_from_env_requires_secret_name(monkeypatch):
+    monkeypatch.setenv("API_BASE_URL", API_BASE_URL)
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", BUCKET)
+    monkeypatch.delenv("ACCESS_KEY_SECRET", raising=False)
+    with pytest.raises(ValueError, match="ACCESS_KEY_SECRET"):
         ExtractConfig.from_env()
 
 

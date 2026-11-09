@@ -79,6 +79,16 @@ class FakeS3:
         return {"Body": Body()}
 
 
+SECRET_NAME = "test/travelProject/serpApi"
+
+
+@pytest.fixture(autouse=True)
+def secret_name_env(monkeypatch):
+    # The Secrets Manager secret name has no hardcoded default; it must come
+    # from the API_KEY_SECRET environment variable.
+    monkeypatch.setenv("API_KEY_SECRET", SECRET_NAME)
+
+
 class FakeSecrets:
     def __init__(self, secret_string):
         self._secret_string = secret_string
@@ -243,7 +253,6 @@ def test_config_from_env_prefixes_default_to_empty(monkeypatch):
 def test_config_from_env_uses_defaults(monkeypatch):
     set_required_env(monkeypatch)
     for name in (
-        "API_KEY_SECRET",
         "MAX_DESTINATIONS",
         "CHECK_IN_OFFSET_DAYS",
         "CHECK_OUT_OFFSET_DAYS",
@@ -257,7 +266,7 @@ def test_config_from_env_uses_defaults(monkeypatch):
     cfg = ExtractConfig.from_env()
 
     assert cfg.api_url == API_URL
-    assert cfg.api_key_secret == "prod/travelProject/serpApi"
+    assert cfg.api_key_secret == SECRET_NAME
     assert cfg.max_destinations == 50
     assert (cfg.check_in_offset_days, cfg.check_out_offset_days) == (7, 14)
     assert cfg.adults == 1
@@ -270,6 +279,13 @@ def test_config_from_env_requires_api_url(monkeypatch):
     set_required_env(monkeypatch)
     monkeypatch.delenv("API_URL", raising=False)
     with pytest.raises(ValueError, match="API_URL"):
+        ExtractConfig.from_env()
+
+
+def test_config_from_env_requires_secret_name(monkeypatch):
+    set_required_env(monkeypatch)
+    monkeypatch.delenv("API_KEY_SECRET", raising=False)
+    with pytest.raises(ValueError, match="API_KEY_SECRET"):
         ExtractConfig.from_env()
 
 
