@@ -170,7 +170,7 @@ _Note: No Load Balancer was used to optimize on cost savings due to only one per
 
 - AWS Glue: Data and job parameters are encrypted in transit with TLS. In order to keep sensitive parameters secret, AWS Secrets Manager is being used and passes the ARN of each secret into the jobs parameter.
 
-- Each S3 bucket and Aurora cluster has the IAM policy `aws:SecureTransport: true` attached to ensure all data coming to/from a database is encrypted via HTTPS or TLS. Any request that comes in through an HTTP connection will automatically be denied.
+- Each individual S3 bucket and Aurora cluster has the policy `aws:SecureTransport` attached to it to ensure all data coming to/from a database is encrypted via HTTPS or TLS. Any request that comes in through an HTTP connection will automatically be denied.
 
 <hr/>
 
