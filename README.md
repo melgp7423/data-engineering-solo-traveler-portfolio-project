@@ -245,11 +245,10 @@ There's no NAT gateway or internet route. Every interface endpoint must have pri
 
 The Lambda functions and the Glue jobs are tested and deployed automatically with GitHub Actions through two separate workflows.
 
-| Workflow                                                     | Deploys                                                              | Packaged as                   |
-| ------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------- |
-| [`deploy-lambda.yaml`](.github/workflows/deploy-lambda.yaml) | Every `extract_*` and `transform_*` Lambda function                  | `.zip` uploaded to AWS Lambda |
-| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `transform_combine_airplane_hotel_destination_datasets` Glue job | Python script uploaded to S3  |
-| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `load_gold_layer` Glue job                                       | Python script uploaded to S3  |
+| Workflow                                                     | Deploys                                                                                           | Packaged as                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | -------------------------------- |
+| [`deploy-lambda.yaml`](.github/workflows/deploy-lambda.yaml) | Every `extract_*` and `transform_*` Lambda function                                               | `.zip` uploaded to AWS Lambda    |
+| [`deploy-glue.yaml`](.github/workflows/deploy-glue.yaml)     | The `transform_combine_airplane_hotel_destination_datasets`<br /> and `load_gold_layer` Glue jobs | PySpark scripts uploaded to Glue |
 
 ### Lambda pipeline (`deploy-lambda.yaml`)
 
