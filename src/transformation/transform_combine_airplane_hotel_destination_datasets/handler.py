@@ -16,8 +16,6 @@ from itertools import chain
 
 def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
 
-    # CONFIG
-
     FLIGHTS_PRICE_CURRENCY = "USD"
 
     DESTINATION_COUNTRY_SUFFIXES = {
@@ -36,7 +34,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
     }
 
     KNOWN_CITY_COUNTRY = {
-        # Canada
         "vancouver": "CA",
         "toronto": "CA",
         "montreal": "CA",
@@ -48,7 +45,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         "winnipeg": "CA",
         "halifax": "CA",
         "kelowna": "CA",
-        # Mexico
         "cancun": "MX",
         "mexico city": "MX",
         "guadalajara": "MX",
@@ -116,7 +112,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         raise ValueError(f"No input node matched '{dataset}'. Inputs were: {keys}")
 
     def keep_extract(df, name):
-        """Keep one extract: the one passed in, or the table's most recent partition."""
         if "extract_date" not in df.columns:
             return df
         target = extract_date or df.agg(F.max("extract_date")).first()[0]
@@ -133,15 +128,13 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
     currency_map = F.create_map([F.lit(x) for x in chain(*ISO_TO_CURRENCY.items())])
 
     def normalize(col):
-        """Lowercase, strip accents, '_'/'-' -> space, drop . and ', collapse spaces."""
         c = F.lower(F.translate(col, ACCENTS_FROM, ACCENTS_TO))
         c = F.regexp_replace(c, r"[_\-]", " ")
         c = F.regexp_replace(c, r"[.'’]", "")
         return F.trim(F.regexp_replace(c, r"\s+", " "))
 
     def city_key(col):
-        """'Vancouver, Canada' -> 'vancouver'; 'St. George' -> 'st george';
-        'Washington, D.C.' -> 'washington'"""
+
         key = normalize(F.split(col, ",").getItem(0))
         return F.coalesce(alias_map[key], key)
 
@@ -155,9 +148,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
     )
 
     def destination_city(col):
-        """'washington_d_c_united_states' -> 'washington'. The extract slug turns
-        every '.' into '_', so initials come through as 'd c'; rejoin them to 'dc'
-        so they line up with CITY_ALIASES and the hotel/flight city keys."""
         key = normalize(F.regexp_replace(F.lower(col), suffix_regex, ""))
         key = F.regexp_replace(key, r"\b(\w) (?=\w\b)", "$1")
         return F.coalesce(alias_map[key], key)
@@ -230,7 +220,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
     )
 
     def to_usd(df, name):
-        """Expects price_local + currency; adds price_usd. Prices already in USD pass through."""
         out = (
             df.join(
                 latest_fx.select("currency", "usd_per_unit"), on="currency", how="left"
@@ -284,8 +273,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
             F.trim(F.split(F.col("formatted"), ",").getItem(0)).alias(
                 "formatted_first"
             ),
-            # First category, skipping the "access" / "access.yes" flags:
-            # ["tourism","tourism.attraction",...] -> "tourism"
             F.expr(
                 "CASE WHEN size(filter(coalesce(categories, array()), c -> NOT startswith(c, 'access'))) > 0 "
                 "THEN filter(categories, c -> NOT startswith(c, 'access'))[0] END"
@@ -299,10 +286,10 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
     is_real_name = (
         F.col("name").isNotNull()
         & (F.length("name") >= 2)
-        & ~F.col("name").rlike(r"^[0-9]")  # "1285", "1285 Elmwood Avenue"
-        & ~F.col("name").rlike(r"^[0-9\s#\-.,/]+$")  # only digits / punctuation
-        & ~F.col("name").contains(",")  # "Holbrook Street, Detroit, MI"
-        & ~(  # bare street used as the name
+        & ~F.col("name").rlike(r"^[0-9]")
+        & ~F.col("name").rlike(r"^[0-9\s#\-.,/]+$")
+        & ~F.col("name").contains(",")
+        & ~(
             F.col("name").rlike(STREET_SUFFIX_REGEX)
             & (F.lower("name") == F.lower("formatted_first"))
         )
@@ -324,8 +311,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         activity_items.groupBy("city")
         .agg(
             F.count("*").alias("activity_count"),
-            # [{name: "Light Matrix", category: "tourism", longitude: -80.12, latitude: 25.79}, ...]
-            # sorted by name, max 10
             F.slice(
                 F.array_sort(
                     F.collect_list(
@@ -463,7 +448,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
                 F.col("local_per_usd")
             ),
         )
-        # Cheapest flight + cheapest priced stay; null if either is missing.
         .withColumn(
             "est_min_trip_cost_usd",
             F.round(F.col("flight_min_usd") + F.col("hotel_min_stay_usd"), 2),
@@ -472,7 +456,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
             "est_avg_trip_cost_usd",
             F.round(F.col("flight_avg_usd") + F.col("hotel_avg_stay_usd"), 2),
         )
-        # Same figures in the destination's currency (CAD / MXN; equal to USD for US cities)
         .withColumn(
             "flight_min_local",
             F.round(F.col("flight_min_usd") * F.col("local_per_usd"), 2),
@@ -491,7 +474,6 @@ def MyTransform(glueContext, dfc) -> DynamicFrameCollection:
         .withColumn("processed_at", F.current_timestamp())
     )
 
-    # Only keep cities with both hotels and activities to recommend.
     incomplete = (
         combined.filter(~(F.col("has_hotels") & F.col("has_activities")))
         .select("city", "has_hotels", "has_activities")
@@ -579,9 +561,6 @@ def main():
     )
 
     def read_with_catalog_schema(database, table_name):
-        """Read a parquet catalog table using the Data Catalog's column list instead of
-        the schema Glue infers from the files, so columns missing from older partitions
-        (e.g. longitude/latitude) come through as nulls rather than disappearing."""
         table = boto3.client("glue").get_table(DatabaseName=database, Name=table_name)[
             "Table"
         ]
@@ -628,7 +607,6 @@ def main():
         .coalesce(1)
     )
 
-    # Script generated for node Write to S3
     glueContext.write_dynamic_frame.from_options(
         frame=DynamicFrame.fromDF(output_df, glueContext, "output_df"),
         connection_type="s3",
@@ -637,7 +615,6 @@ def main():
         format_options={"compression": "snappy"},
         transformation_ctx="WriteToS3_node",
     )
-
     job.commit()
 
 
