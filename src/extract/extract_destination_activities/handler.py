@@ -59,7 +59,7 @@ class ExtractConfig:
             geocode_url=os.environ.get("GEOCODE_SEARCH_URL", "").strip(),
             places_url=os.environ.get("PLACES_URL", "").strip(),
             api_key_secret=os.environ.get(
-                "API_KEY_SECRET", "prod/travelProject/geoapify"
+                "API_KEY_SECRET", "".strip()
             ),
             aws_hotel_room_rates_s3_bucket=os.environ.get(
                 "AWS_HOTEL_ROOM_RATES_S3_BUCKET", ""
