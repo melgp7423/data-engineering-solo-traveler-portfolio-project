@@ -34,7 +34,7 @@ class ExtractConfig:
             api_base_url=os.environ.get("API_BASE_URL", "").strip(),
             api_endpoint=os.environ.get("API_ENDPOINT", "latest"),
             access_key_secret=os.environ.get(
-                "ACCESS_KEY_SECRET", "prod/travelProject/exchangeRatesApi"
+                "ACCESS_KEY_SECRET", "".strip()
             ),
             aws_exchange_rates_s3_bucket=os.environ.get(
                 "AWS_EXCHANGE_RATES_S3_BUCKET", ""
