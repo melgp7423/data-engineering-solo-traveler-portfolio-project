@@ -182,7 +182,7 @@ _Note: No Load Balancer was used to optimize on cost savings due to only one per
 
 **Aurora DSQL Cluster Policies**
 
-- Aurora DSQL clusters have policies attached to them that block all connections coming from the public internet. Although the entire ETL is set up in one region, this policy has been set up as a multi-region cluster policy to specify a specific VPC that is able to connect to these clusters in order to maintain ETL scalability.
+- Aurora DSQL clusters have policies attached to them that block all connections coming from the public internet. Although the entire ETL is set up in one region, this policy has been set up as a multi-region cluster policy to specify a specific VPC that is able to connect to each cluster in order to maintain ETL scalability.
 
 **Least-Privilege IAM Roles**
 
