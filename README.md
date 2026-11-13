@@ -300,7 +300,7 @@ The `transform_combine_airplane_hotel_destination_datasets` and the `load_gold_l
 To run the code and tests on your computer:
 
 - [Git](https://git-scm.com/downloads)
-- [Python 3.14](https://www.python.org/downloads/) and `pip`
+- [Python 3.15](https://www.python.org/downloads/) and `pip`
 
 To deploy and run the pipeline in AWS, you also need:
 
@@ -320,7 +320,7 @@ To deploy and run the pipeline in AWS, you also need:
 2. **Create and activate a virtual environment**
 
    ```bash
-   python3.14 -m venv .venv
+   python3.15 -m venv .venv
    source .venv/bin/activate
    ```
 
