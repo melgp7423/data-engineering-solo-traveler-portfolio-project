@@ -13,6 +13,7 @@
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Setup](#setup)
+- [Cost Savings](#cost-savings)
 
 ## Overview
 
@@ -401,3 +402,9 @@ Account-specific identifiers are never hard-coded. The deploy workflows read the
 | `TRANSFORMED_PREFIX`  | every `transform_*` Lambda                 | Folder above `extract_date=` for that source's Parquet output                         |
 | `FLIGHT_DEALS_PREFIX` | `extract_hotel_room_rates`                 | Raw prefix of the airplane ticket rates data in `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET` |
 | `HOTEL_PREFIX`        | `extract_destination_activities`           | Raw prefix of the hotel room rates data in `AWS_HOTEL_ROOM_RATES_S3_BUCKET`           |
+
+## Cost Savings
+
+### Lambda Functions
+
+Extract Lambda functions have been configured to run on 64-bit ARM architecture instead of x86.
