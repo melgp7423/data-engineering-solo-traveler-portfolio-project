@@ -407,4 +407,8 @@ Account-specific identifiers are never hard-coded. The deploy workflows read the
 
 ### Lambda Functions
 
-Extract Lambda functions have been configured to run on 64-bit ARM architecture instead of x86.
+- Extract Lambda functions have been configured to run on 64-bit ARM architecture instead of x86.
+
+### S3 Buckets
+
+- Lifecycle rules were placed on all raw/transformed S3 buckets to delete all data older than 5 days.
