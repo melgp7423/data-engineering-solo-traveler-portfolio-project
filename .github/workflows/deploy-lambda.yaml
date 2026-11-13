@@ -5,13 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch: # manual run deploys every lambda
+  workflow_dispatch:
 
 env:
   AWS_REGION: us-east-2
-  # transform_combine_airplane_hotel_destination_datasets is a Glue job, deployed by deploy-glue.yaml
-  # Maps each lambda folder (src/extract/ for extraction, src/transformation/ for transformation) to its AWS Lambda function ARN
-  # ARNs come from repository secrets (same names as the local .env file)
   FUNCTION_NAMES: >-
     {
       "extract_exchange_rates": "${{ secrets.AWS_EXTRACT_EXCHANGE_RATES_ARN }}",
@@ -25,7 +22,6 @@ env:
     }
 
 jobs:
-  # Figure out which lambdas changed so only those get tested/deployed
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
@@ -78,7 +74,6 @@ jobs:
             echo 'lambdas=${{ steps.filter.outputs.changes }}' >> "$GITHUB_OUTPUT"
           fi
 
-  # CI: install deps and run tests for each changed lambda
   test:
     needs: detect-changes
     if: needs.detect-changes.outputs.lambdas != '[]'
@@ -88,14 +83,13 @@ jobs:
       matrix:
         lambda: ${{ fromJSON(needs.detect-changes.outputs.lambdas) }}
     env:
-      # transform_* lambdas live in src/transformation/, extract_* lambdas in src/extract/
       STAGE_DIR: ${{ startsWith(matrix.lambda, 'transform_') && 'transformation' || 'extract' }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       - name: Install dependencies
         run: |
@@ -105,7 +99,6 @@ jobs:
       - name: Run tests
         env:
           PYTHONPATH: src
-        # exit code 5 = no tests collected; a missing test file is also allowed until tests are written
         run: |
           TEST_FILE="tests/$STAGE_DIR/test_${{ matrix.lambda }}.py"
           if [ ! -f "$TEST_FILE" ]; then
@@ -114,12 +107,10 @@ jobs:
           fi
           pytest "$TEST_FILE" || [ $? -eq 5 ]
 
-  # CD: package and deploy each changed lambda (only on main, never on PRs)
   deploy:
     needs: [detect-changes, test]
     if: github.event_name != 'pull_request' && needs.detect-changes.outputs.lambdas != '[]'
     runs-on: ubuntu-latest
-    # id-token: write lets the job request an OIDC token to assume the AWS role
     permissions:
       id-token: write
       contents: read
@@ -128,14 +119,13 @@ jobs:
       matrix:
         lambda: ${{ fromJSON(needs.detect-changes.outputs.lambdas) }}
     env:
-      # transform_* lambdas live in src/transformation/, extract_* lambdas in src/extract/
       STAGE_DIR: ${{ startsWith(matrix.lambda, 'transform_') && 'transformation' || 'extract' }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       - name: Build deployment package
         run: |
@@ -149,8 +139,6 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
 
-      # The zip is staged in S3 rather than sent with --zip-file: direct uploads are capped at 50 MB,
-      # and lambdas that bundle pyarrow are bigger than that. Via S3 the limit is 250 MB unzipped.
       - name: Deploy to Lambda
         env:
           DEPLOY_BUCKET: ${{ secrets.AWS_LAMBDA_DEPLOY_ARTIFACTS_S3_BUCKET }}
