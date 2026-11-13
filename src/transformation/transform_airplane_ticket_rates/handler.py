@@ -23,7 +23,6 @@ _S3_CLIENT_CONFIG = Config(
 )
 
 
-# Configuration
 @dataclass(frozen=True)
 class TransformConfig:
 
