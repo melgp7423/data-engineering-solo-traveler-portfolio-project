@@ -1,6 +1,7 @@
 import io
 import json
 import sys
+import threading
 import types
 from datetime import date
 
@@ -8,10 +9,21 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+# CI installs only pytest + the lambda's requirements.txt (pyarrow), so stand in
+# for the AWS SDK that the Lambda runtime normally provides.
 try:
     import boto3
 except ImportError:
     sys.modules["boto3"] = types.SimpleNamespace(client=lambda *_a, **_k: None)
+
+try:
+    import botocore.config
+except ImportError:
+    _botocore = types.ModuleType("botocore")
+    _botocore.config = types.ModuleType("botocore.config")
+    _botocore.config.Config = lambda **kwargs: types.SimpleNamespace(**kwargs)
+    sys.modules["botocore"] = _botocore
+    sys.modules["botocore.config"] = _botocore.config
 
 from transformation.transform_exchange_rates import handler
 from transformation.transform_exchange_rates.handler import (
@@ -48,12 +60,20 @@ class FakeS3:
         self.objects = dict(objects or {})
         self.puts = []
         self.paginator = FakePaginator(pages or [])
+        self.read_threads = set()
+        self._lock = threading.Lock()
 
     def get_object(self, Bucket, Key):
+        self.read_threads.add(threading.get_ident())
         return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
 
     def put_object(self, **kwargs):
-        self.puts.append(kwargs)
+        with self._lock:
+            self.puts.append(kwargs)
+
+    def put_keys(self):
+        # Files are processed in parallel, so uploads can land in any order.
+        return sorted(p["Key"] for p in self.puts)
 
     def get_paginator(self, name):
         assert name == "list_objects_v2"
@@ -70,6 +90,11 @@ def build_service(s3, today=date(2026, 10, 10), raw_prefix="", transformed_prefi
         key_builder=TransformedKeyBuilder(raw_prefix, transformed_prefix),
         writer=S3ParquetWriter("travel-bucket", client=s3),
     )
+
+
+def make_locator(default_bucket="travel-bucket", raw_prefix="", client=None, **kwargs):
+    # Events that carry a key never touch S3, so those tests need no client.
+    return RawObjectLocator(default_bucket, raw_prefix, client=client, **kwargs)
 
 
 def test_key_parser_extracts_base_and_date_from_file_name():
@@ -140,7 +165,7 @@ def test_rejects_payload_without_numeric_rates(payload):
 
 
 def test_locator_uses_extract_lambda_output_key():
-    locator = RawObjectLocator("raw-bucket")
+    locator = make_locator("raw-bucket")
 
     assert locator.locate(
         {"Payload": {"bucket": "other-raw", "key": RAW_KEY, "status": "SUCCEEDED"}}
@@ -173,7 +198,7 @@ def test_locator_lists_every_json_in_todays_partition():
 
 
 def test_locator_errors_on_empty_partition():
-    locator = RawObjectLocator(
+    locator = make_locator(
         "raw-bucket", client=FakeS3(pages=[{}]), today=lambda: date(2026, 10, 10)
     )
 
@@ -208,12 +233,20 @@ def test_service_writes_parquet_for_every_file_in_partition():
     assert result["status"] == "SUCCEEDED"
     assert result["file_count"] == 2
     assert result["row_count"] == 4
+    # Results keep the sorted key order even though files run in parallel.
+    assert [w["source_key"] for w in result["written"]] == [OTHER_KEY, RAW_KEY]
     assert result["written"][1]["rate_date"] == "2026-10-10"
-    assert [p["Key"] for p in s3.puts] == [
+    assert s3.put_keys() == [
         OTHER_KEY.replace(".json", ".parquet"),
         RAW_KEY.replace(".json", ".parquet"),
     ]
-    written = pq.read_table(io.BytesIO(s3.puts[1]["Body"]))
+    put = next(
+        p for p in s3.puts if p["Key"] == RAW_KEY.replace(".json", ".parquet")
+    )
+    assert put["ContentType"] == "application/vnd.apache.parquet"
+    # The writer uploads the buffer itself, rewound to the start.
+    assert put["Body"].tell() == 0
+    written = pq.read_table(put["Body"])
     assert written.column("currency").to_pylist() == ["CAD", "MXN", "USD"]
     assert written.column("rate_date").to_pylist() == [date(2026, 10, 10)] * 3
 
@@ -232,6 +265,106 @@ def test_service_skips_bad_file_and_reports_partial():
     assert result["status"] == "PARTIAL"
     assert result["file_count"] == 1
     assert result["failed"][0]["source_key"] == OTHER_KEY
+    assert s3.put_keys() == [RAW_KEY.replace(".json", ".parquet")]
+
+
+def test_service_processes_multiple_files_in_parallel_threads():
+    keys = [f"extract_date=2026-10-10/rates_USD_2026-10-10_{i:06d}_x.json" for i in range(3)]
+    barrier = threading.Barrier(len(keys), timeout=5)
+
+    class BarrierS3(FakeS3):
+        def get_object(self, Bucket, Key):
+            # Every read waits for the others; this only completes if the
+            # files are read concurrently rather than one after another.
+            barrier.wait()
+            return super().get_object(Bucket, Key)
+
+    s3 = BarrierS3(
+        objects={("travel-bucket", k): json.dumps(PAYLOAD).encode() for k in keys},
+        pages=[{"Contents": [{"Key": k} for k in keys]}],
+    )
+
+    result = build_service(s3).run({})
+
+    assert result["file_count"] == 3
+    assert len(s3.read_threads) == 3
+
+
+def test_service_single_file_runs_without_thread_pool(monkeypatch):
+    def fail(*_a, **_k):
+        raise AssertionError("ThreadPoolExecutor should not be used for one file")
+
+    monkeypatch.setattr(handler, "ThreadPoolExecutor", fail)
+    s3 = FakeS3(objects={("travel-bucket", RAW_KEY): json.dumps(PAYLOAD).encode()})
+
+    result = build_service(s3).run({"key": RAW_KEY})
+
+    assert result["status"] == "SUCCEEDED"
+    assert result["written"][0]["key"] == RAW_KEY.replace(".json", ".parquet")
+
+
+def test_service_caps_workers_at_max_workers(monkeypatch):
+    seen = []
+    real_pool = handler.ThreadPoolExecutor
+
+    def recording_pool(max_workers):
+        seen.append(max_workers)
+        return real_pool(max_workers=max_workers)
+
+    monkeypatch.setattr(handler, "ThreadPoolExecutor", recording_pool)
+    keys = [
+        f"extract_date=2026-10-10/rates_USD_2026-10-10_{i:06d}_x.json"
+        for i in range(handler.MAX_WORKERS + 2)
+    ]
+    s3 = FakeS3(
+        objects={("travel-bucket", k): json.dumps(PAYLOAD).encode() for k in keys},
+        pages=[{"Contents": [{"Key": k} for k in keys]}],
+    )
+
+    result = build_service(s3).run({})
+
+    assert seen == [handler.MAX_WORKERS]
+    assert result["file_count"] == len(keys)
+
+
+def test_service_skips_parquet_objects():
+    s3 = FakeS3()
+    parquet_key = RAW_KEY.replace(".json", ".parquet")
+
+    result = build_service(s3).run({"key": parquet_key})
+
+    assert result == {
+        "status": "SKIPPED",
+        "source_bucket": "travel-bucket",
+        "skipped": [parquet_key],
+    }
+    assert s3.puts == []
+
+
+def written_compression(s3):
+    metadata = pq.ParquetFile(s3.puts[0]["Body"]).metadata
+    return metadata.row_group(0).column(0).compression
+
+
+def test_writer_compresses_with_zstd_by_default():
+    s3 = FakeS3()
+    table = ExchangeRatesTransformer().transform(PAYLOAD, RAW_KEY)
+
+    assert S3ParquetWriter("travel-bucket", client=s3).write("k.parquet", table) == (
+        "k.parquet"
+    )
+    assert written_compression(s3) == "ZSTD"
+
+
+def test_writer_uses_configured_compression():
+    s3 = FakeS3()
+    table = ExchangeRatesTransformer().transform(PAYLOAD, RAW_KEY)
+
+    S3ParquetWriter("travel-bucket", client=s3, compression="snappy").write(
+        "k.parquet", table
+    )
+
+    assert written_compression(s3) == "SNAPPY"
 
 
 def test_service_raises_when_every_file_fails():
@@ -331,17 +464,66 @@ def test_config_from_env_prefixes_default_to_empty(monkeypatch):
     assert cfg.transformed_prefix == ""
 
 
-def test_build_service_wires_config(monkeypatch):
-    monkeypatch.setattr(handler.boto3, "client", lambda *_a, **_k: None)
+def test_config_parquet_compression_defaults_to_zstd(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", "travel-bucket")
+    monkeypatch.delenv("PARQUET_COMPRESSION", raising=False)
+
+    assert TransformConfig.from_env().parquet_compression == "zstd"
+
+
+def test_config_reads_parquet_compression(monkeypatch):
+    monkeypatch.setenv("AWS_EXCHANGE_RATES_S3_BUCKET", "travel-bucket")
+    monkeypatch.setenv("PARQUET_COMPRESSION", " Snappy ")
+
+    assert TransformConfig.from_env().parquet_compression == "snappy"
+
+
+def test_build_service_wires_config_and_shares_one_s3_client(monkeypatch):
+    created = []
+
+    def fake_client(*args, **kwargs):
+        created.append((args, kwargs))
+        return object()
+
+    monkeypatch.setattr(handler.boto3, "client", fake_client)
     service = handler.build_service(
         TransformConfig(
             aws_exchange_rates_s3_bucket="travel-bucket",
             raw_prefix="raw/",
             transformed_prefix="transformed/",
+            parquet_compression="snappy",
         )
     )
+
     assert service._locator._default_bucket == "travel-bucket"
     assert service._writer.bucket == "travel-bucket"
+    assert service._writer._compression == "snappy"
+    assert created == [(("s3",), {"config": handler._S3_CLIENT_CONFIG})]
+    assert (
+        service._locator._client
+        is service._reader._client
+        is service._writer._client
+    )
+
+
+def test_s3_client_pool_fits_every_worker():
+    # A pool smaller than the worker count would make threads queue for connections.
+    assert handler._S3_CLIENT_CONFIG.max_pool_connections >= handler.MAX_WORKERS
+
+
+def test_build_service_uses_injected_client(monkeypatch):
+    def fail(*_a, **_k):
+        raise AssertionError("boto3.client should not be called")
+
+    monkeypatch.setattr(handler.boto3, "client", fail)
+    s3 = FakeS3()
+
+    service = handler.build_service(
+        TransformConfig(aws_exchange_rates_s3_bucket="travel-bucket"), client=s3
+    )
+
+    assert service._reader._client is s3
+    assert service._writer._client is s3
 
 
 def test_lambda_handler_builds_once_and_passes_event(monkeypatch):
@@ -394,7 +576,7 @@ def test_locator_reads_every_s3_notification_record_and_decodes_keys():
             },
         ]
     }
-    assert RawObjectLocator("travel-bucket").locate(event) == (
+    assert make_locator().locate(event) == (
         "b",
         ["extract_date=2026-10-10/a b.json", "extract_date=2026-10-10/c.json"],
     )
@@ -405,11 +587,11 @@ def test_locator_reads_eventbridge_object_created_event():
         "detail-type": "Object Created",
         "detail": {"bucket": {"name": "b"}, "object": {"key": "k.json"}},
     }
-    assert RawObjectLocator("travel-bucket").locate(event) == ("b", ["k.json"])
+    assert make_locator().locate(event) == ("b", ["k.json"])
 
 
 def test_locator_uses_default_bucket_when_event_has_only_key():
-    assert RawObjectLocator("travel-bucket").locate({"key": "k.json"}) == (
+    assert make_locator().locate({"key": "k.json"}) == (
         "travel-bucket",
         ["k.json"],
     )
@@ -418,4 +600,4 @@ def test_locator_uses_default_bucket_when_event_has_only_key():
 @pytest.mark.parametrize("event", [None, "k.json", ["k.json"]])
 def test_locator_rejects_non_object_events(event):
     with pytest.raises(ValueError, match="JSON object"):
-        RawObjectLocator("travel-bucket").locate(event)
+        make_locator().locate(event)
