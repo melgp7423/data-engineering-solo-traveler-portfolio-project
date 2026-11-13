@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Callable, Dict, List, Optional, Tuple
@@ -11,17 +12,27 @@ from typing import Callable, Dict, List, Optional, Tuple
 import boto3
 import pyarrow as pa
 import pyarrow.parquet as pq
+from botocore.config import Config
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+
+MAX_WORKERS = 8
+
+_S3_CLIENT_CONFIG = Config(
+    connect_timeout=3,
+    read_timeout=10,
+    retries={"max_attempts": 3, "mode": "standard"},
+    max_pool_connections=MAX_WORKERS,
+)
 
 
-# Configuration
 @dataclass(frozen=True)
 class TransformConfig:
     aws_exchange_rates_s3_bucket: str
     raw_prefix: str = ""
     transformed_prefix: str = ""
+    parquet_compression: str = "zstd"
 
     @staticmethod
     def _bucket_from_env(name: str) -> str:
@@ -38,6 +49,9 @@ class TransformConfig:
             ),
             raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
             transformed_prefix=os.environ.get("TRANSFORMED_PREFIX", "").strip(),
+            parquet_compression=os.environ.get("PARQUET_COMPRESSION", "zstd")
+            .strip()
+            .lower(),
         )
         config.validate()
         return config
@@ -62,8 +76,8 @@ class RawObjectLocator:
     def __init__(
         self,
         default_bucket: str,
-        raw_prefix: str = "",
-        client=None,
+        raw_prefix: str,
+        client,
         today: Callable[[], date] = None,
     ):
         self._default_bucket = default_bucket
@@ -80,7 +94,6 @@ class RawObjectLocator:
 
         records = event.get("Records")
         if records:
-            # S3 notifications URL-encode keys ("=" -> "%3D", spaces -> "+").
             bucket = records[0]["s3"]["bucket"]["name"]
             return bucket, [
                 urllib.parse.unquote_plus(r["s3"]["object"]["key"]) for r in records
@@ -99,9 +112,8 @@ class RawObjectLocator:
 
     def _partition_keys(self, bucket: str, extract_date: str) -> List[str]:
         partition = f"{self._raw_prefix}extract_date={extract_date}/"
-        client = self._client or boto3.client("s3")
         keys = []
-        for page in client.get_paginator("list_objects_v2").paginate(
+        for page in self._client.get_paginator("list_objects_v2").paginate(
             Bucket=bucket, Prefix=partition
         ):
             keys.extend(
@@ -126,8 +138,8 @@ class RawObjectLocator:
 # S3 read
 class S3RawReader:
 
-    def __init__(self, client=None):
-        self._client = client or boto3.client("s3")
+    def __init__(self, client):
+        self._client = client
 
     def read(self, bucket: str, key: str) -> Dict:
         body = self._client.get_object(Bucket=bucket, Key=key)["Body"].read()
@@ -161,7 +173,7 @@ class ExchangeRatesTransformer:
             pa.field("rate_date", pa.date32()),
             pa.field("base_currency", pa.string()),
             pa.field("currency", pa.string()),
-            pa.field("rate", pa.float64()),  # units of currency per 1 base_currency
+            pa.field("rate", pa.float64()), 
         ]
     )
 
@@ -212,9 +224,10 @@ class TransformedKeyBuilder:
 
 class S3ParquetWriter:
 
-    def __init__(self, bucket: str, client=None):
+    def __init__(self, bucket: str, client, compression: str = "zstd"):
         self._bucket = bucket
-        self._client = client or boto3.client("s3")
+        self._client = client
+        self._compression = compression
 
     @property
     def bucket(self) -> str:
@@ -222,11 +235,12 @@ class S3ParquetWriter:
 
     def write(self, key: str, table: pa.Table) -> str:
         buffer = io.BytesIO()
-        pq.write_table(table, buffer, compression="snappy")
+        pq.write_table(table, buffer, compression=self._compression)
+        buffer.seek(0)  
         self._client.put_object(
             Bucket=self._bucket,
             Key=key,
-            Body=buffer.getvalue(),
+            Body=buffer,
             ContentType="application/vnd.apache.parquet",
         )
         return key
@@ -254,33 +268,30 @@ class TransformService:
         self._writer = writer
 
     def run(self, event: Dict) -> Dict[str, object]:
-        raw_bucket, raw_keys = self._locator.locate(event)
-
-        written, failed = [], []
-        for raw_key in raw_keys:
-            try:
-                payload = self._reader.read(raw_bucket, raw_key)
-                table = self._transformer.transform(payload, raw_key)
-            except (InvalidRawPayloadError, ValueError) as err:
-                # One bad file shouldn't throw away the others.
-                # (json.JSONDecodeError and pyarrow.ArrowInvalid are ValueErrors.)
-                logger.error(
-                    "Could not transform s3://%s/%s: %s", raw_bucket, raw_key, err
-                )
-                failed.append({"source_key": raw_key, "error": str(err)})
-                continue
-            key = self._writer.write(self._key_builder.build(raw_key), table)
+        raw_bucket, located_keys = self._locator.locate(event)
+        raw_keys = [k for k in located_keys if not k.endswith(".parquet")]
+        if not raw_keys:
             logger.info(
-                "Wrote %d rates to s3://%s/%s", table.num_rows, self._writer.bucket, key
+                "Skipping %d non-raw objects in s3://%s", len(located_keys), raw_bucket
             )
-            written.append(
-                {
-                    "source_key": raw_key,
-                    "key": key,
-                    "rate_date": f"{table.column('rate_date')[0].as_py():%Y-%m-%d}",
-                    "row_count": table.num_rows,
-                }
-            )
+            return {
+                "status": "SKIPPED",
+                "source_bucket": raw_bucket,
+                "skipped": located_keys,
+            }
+
+        if len(raw_keys) == 1:
+            results = [self._process(raw_bucket, raw_keys[0])]
+        else:
+            with ThreadPoolExecutor(
+                max_workers=min(MAX_WORKERS, len(raw_keys))
+            ) as pool:
+                results = list(
+                    pool.map(lambda key: self._process(raw_bucket, key), raw_keys)
+                )
+
+        written = [item for ok, item in results if ok]
+        failed = [item for ok, item in results if not ok]
 
         if not written:
             raise TransformError(
@@ -297,16 +308,37 @@ class TransformService:
             "failed": failed,
         }
 
+    def _process(self, raw_bucket: str, raw_key: str) -> Tuple[bool, Dict[str, object]]:
+        try:
+            payload = self._reader.read(raw_bucket, raw_key)
+            table = self._transformer.transform(payload, raw_key)
+        except (InvalidRawPayloadError, ValueError) as err:
+            logger.error("Could not transform s3://%s/%s: %s", raw_bucket, raw_key, err)
+            return False, {"source_key": raw_key, "error": str(err)}
+        key = self._writer.write(self._key_builder.build(raw_key), table)
+        logger.info(
+            "Wrote %d rates to s3://%s/%s", table.num_rows, self._writer.bucket, key
+        )
+        return True, {
+            "source_key": raw_key,
+            "key": key,
+            "rate_date": f"{table.column('rate_date')[0].as_py():%Y-%m-%d}",
+            "row_count": table.num_rows,
+        }
 
-def build_service(config: TransformConfig) -> TransformService:
+
+def build_service(config: TransformConfig, client=None) -> TransformService:
+    client = client or boto3.client("s3", config=_S3_CLIENT_CONFIG)
     return TransformService(
         locator=RawObjectLocator(
-            config.aws_exchange_rates_s3_bucket, config.raw_prefix
+            config.aws_exchange_rates_s3_bucket, config.raw_prefix, client
         ),
-        reader=S3RawReader(),
+        reader=S3RawReader(client),
         transformer=ExchangeRatesTransformer(),
         key_builder=TransformedKeyBuilder(config.raw_prefix, config.transformed_prefix),
-        writer=S3ParquetWriter(config.aws_exchange_rates_s3_bucket),
+        writer=S3ParquetWriter(
+            config.aws_exchange_rates_s3_bucket, client, config.parquet_compression
+        ),
     )
 
 
