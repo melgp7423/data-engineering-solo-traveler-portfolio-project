@@ -419,3 +419,5 @@ Account-specific identifiers are never hard-coded. The deploy workflows read the
 ### S3 Buckets
 
 - Lifecycle rules were placed on all raw/transformed S3 buckets to delete all data older than 5 days.
+
+- S3 versioning was not configured for this ETL pipeline seeing as it is just being used by one person.
