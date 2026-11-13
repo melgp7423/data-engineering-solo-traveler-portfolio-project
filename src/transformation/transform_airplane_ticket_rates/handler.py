@@ -10,9 +10,17 @@ from typing import Callable, Dict, List, Optional, Tuple
 import boto3
 import pyarrow as pa
 import pyarrow.parquet as pq
+from botocore.config import Config
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO").upper())
+
+
+_S3_CLIENT_CONFIG = Config(
+    connect_timeout=3,
+    read_timeout=10,
+    retries={"max_attempts": 3, "mode": "standard"},
+)
 
 
 # Configuration
@@ -22,6 +30,7 @@ class TransformConfig:
     aws_airplane_ticket_rates_s3_bucket: str
     raw_prefix: str
     transformed_prefix: str
+    parquet_compression: str = "zstd"
 
     @staticmethod
     def _bucket_from_env(name: str) -> str:
@@ -38,6 +47,9 @@ class TransformConfig:
             ),
             raw_prefix=os.environ.get("RAW_PREFIX", "").strip(),
             transformed_prefix=os.environ.get("TRANSFORMED_PREFIX", "").strip(),
+            parquet_compression=os.environ.get("PARQUET_COMPRESSION", "zstd")
+            .strip()
+            .lower(),
         )
         config.validate()
         return config
@@ -53,13 +65,12 @@ class TransformConfig:
             )
 
 
-# Locating the input
 class RawObjectLocator:
     def __init__(
         self,
         default_bucket: str,
         raw_prefix: str,
-        client=None,
+        client,
         today: Callable[[], date] = None,
     ):
         self._default_bucket = default_bucket
@@ -92,9 +103,8 @@ class RawObjectLocator:
 
     def _latest_key(self, extract_date: str) -> str:
         partition = f"{self._raw_prefix}/extract_date={extract_date}/"
-        client = self._client or boto3.client("s3")
         latest = None
-        for page in client.get_paginator("list_objects_v2").paginate(
+        for page in self._client.get_paginator("list_objects_v2").paginate(
             Bucket=self._default_bucket, Prefix=partition
         ):
             for obj in page.get("Contents", []):
@@ -111,11 +121,10 @@ class RawObjectLocator:
         return latest["Key"]
 
 
-# S3 read
 class S3RawReader:
 
-    def __init__(self, client=None):
-        self._client = client or boto3.client("s3")
+    def __init__(self, client):
+        self._client = client
 
     def read(self, bucket: str, key: str) -> Dict:
         body = self._client.get_object(Bucket=bucket, Key=key)["Body"].read()
@@ -123,7 +132,6 @@ class S3RawReader:
         return json.loads(body)
 
 
-# Transformation
 class InvalidRawPayloadError(Exception):
     """Raised when the raw JSON is missing the sections we need."""
 
@@ -223,7 +231,6 @@ class DealsTransformer:
         )
 
 
-# S3 write
 class TransformedKeyBuilder:
 
     def __init__(self, raw_prefix: str, transformed_prefix: str):
@@ -241,9 +248,10 @@ class TransformedKeyBuilder:
 
 
 class S3ParquetWriter:
-    def __init__(self, bucket: str, client=None):
+    def __init__(self, bucket: str, client, compression: str = "zstd"):
         self._bucket = bucket
-        self._client = client or boto3.client("s3")
+        self._client = client
+        self._compression = compression
 
     @property
     def bucket(self) -> str:
@@ -251,17 +259,17 @@ class S3ParquetWriter:
 
     def write(self, key: str, table: pa.Table) -> str:
         buffer = io.BytesIO()
-        pq.write_table(table, buffer, compression="snappy")
+        pq.write_table(table, buffer, compression=self._compression)
+        buffer.seek(0)  # upload the buffer itself; getvalue() would copy it
         self._client.put_object(
             Bucket=self._bucket,
             Key=key,
-            Body=buffer.getvalue(),
+            Body=buffer,
             ContentType="application/vnd.apache.parquet",
         )
         return key
 
 
-# Orchestration
 class TransformService:
     """Coordinates locate -> read -> transform -> name -> store."""
 
@@ -281,6 +289,15 @@ class TransformService:
 
     def run(self, event: Dict) -> Dict[str, object]:
         raw_bucket, raw_key = self._locator.locate(event)
+
+        if raw_key.endswith(".parquet"):
+            logger.info("Skipping non-raw object s3://%s/%s", raw_bucket, raw_key)
+            return {
+                "status": "SKIPPED",
+                "source_bucket": raw_bucket,
+                "source_key": raw_key,
+            }
+
         payload = self._reader.read(raw_bucket, raw_key)
         table = self._transformer.transform(payload)
         key = self._writer.write(self._key_builder.build(raw_key), table)
@@ -299,16 +316,20 @@ class TransformService:
         }
 
 
-def build_service(config: TransformConfig) -> TransformService:
-
+def build_service(config: TransformConfig, client=None) -> TransformService:
+    client = client or boto3.client("s3", config=_S3_CLIENT_CONFIG)
     return TransformService(
         locator=RawObjectLocator(
-            config.aws_airplane_ticket_rates_s3_bucket, config.raw_prefix
+            config.aws_airplane_ticket_rates_s3_bucket, config.raw_prefix, client
         ),
-        reader=S3RawReader(),
+        reader=S3RawReader(client),
         transformer=DealsTransformer(),
         key_builder=TransformedKeyBuilder(config.raw_prefix, config.transformed_prefix),
-        writer=S3ParquetWriter(config.aws_airplane_ticket_rates_s3_bucket),
+        writer=S3ParquetWriter(
+            config.aws_airplane_ticket_rates_s3_bucket,
+            client,
+            config.parquet_compression,
+        ),
     )
 
 
