@@ -409,6 +409,13 @@ Account-specific identifiers are never hard-coded. The deploy workflows read the
 
 - Extract Lambda functions have been configured to run on 64-bit ARM architecture instead of x86.
 
+- Transform Lambda functions have been cost optimized to:
+  - Use one shared S3 client instead of up to three with its connection pool sized to the 8 workers.
+  - Short S3 timeouts and capped retries have been configured so a stalled call can’t bill up to the Lambda timeout.
+  - `.parquet` keys are dropped from the batch so if nothing is left it returns SKIPPED instead of raising and being retried.
+  - Snappy compressions were dropped and instead ztsd compressions are being saved into the transformed S3 buckets.
+  - There are no extra buffer copies on upload.
+
 ### S3 Buckets
 
 - Lifecycle rules were placed on all raw/transformed S3 buckets to delete all data older than 5 days.
