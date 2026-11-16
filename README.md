@@ -246,17 +246,24 @@ There's no NAT gateway or internet route. Every interface endpoint must have pri
 
 ### Lambda Functions
 
+**Extract**
+
 - All Extract Lambda functions have been configured to run on 64-bit ARM architecture instead of x86.
 - The following Extract Lambda Functions have been tuned with AWS Lambda Power Tuning to find the best memory allocation for each function. Each function was tuned individually weighing both cost and execution speed.
-  - Extract Airplane Rates: memory allocation 980 MB
+  - Extract Airplane Ticket Rates: memory allocation 980 MB
   - Extract Hotel Room Rates: memory allocation 900 MB
 
-- Transform Lambda functions have been cost optimized to:
+**Transform**
+
+- Transform Lambda Functions have been cost optimized to:
   - Use one shared S3 client instead of up to three with its connection pool sized to the 8 workers.
   - Short S3 timeouts and capped retries have been configured so a stalled call can’t bill up to the Lambda timeout.
   - `.parquet` keys are dropped from the batch so if nothing is left it returns SKIPPED instead of raising and being retried.
   - Snappy compressions were dropped and instead ztsd compressions are being saved into the transformed S3 buckets.
   - There are no extra buffer copies on upload.
+
+- The following Transform Lambda Functions have been tuned with AWS Lambda Power Tuning to find the best memory allocation for each function. Each function was tuned individually weighing both cost and execution speed.
+  - Transform Airplane Ticket Rates: memory allocation 700 MB
 
 ### S3 Buckets
 
