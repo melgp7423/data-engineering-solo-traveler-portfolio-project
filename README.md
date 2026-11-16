@@ -9,11 +9,11 @@
 - [Architecture](#architecture)
 - [Security](#security)
 - [Athena/Aurora Federated Query Connector](#athenaaurora-federated-query-connector)
+- [Cost Savings and Performance Tuning](#cost-savings-and-performance-tuning)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Setup](#setup)
-- [Cost Savings](#cost-savings)
 
 ## Overview
 
@@ -242,6 +242,28 @@ There's no NAT gateway or internet route. Every interface endpoint must have pri
 4. DSQL checks the token's IAM signature and the cluster resource policy (connection must come from the VPC).
 5. The connector reads metadata and rows, pushes filters down to DSQL where it can, and returns results to Athena, through the spill bucket for large results.
 
+## Cost Savings and Performance Tuning
+
+### Lambda Functions
+
+- All Extract Lambda functions have been configured to run on 64-bit ARM architecture instead of x86.
+- The following Extract Lambda Functions have been tuned with AWS Lambda Power Tuning to find the best memory allocation for each function. Each function was tuned individually weighing both cost and execution speed.
+  - Extract Airplane Rates: memory allocation 980 MB
+  - Extract Hotel Room Rates: memory allocation 900 MB
+
+- Transform Lambda functions have been cost optimized to:
+  - Use one shared S3 client instead of up to three with its connection pool sized to the 8 workers.
+  - Short S3 timeouts and capped retries have been configured so a stalled call can’t bill up to the Lambda timeout.
+  - `.parquet` keys are dropped from the batch so if nothing is left it returns SKIPPED instead of raising and being retried.
+  - Snappy compressions were dropped and instead ztsd compressions are being saved into the transformed S3 buckets.
+  - There are no extra buffer copies on upload.
+
+### S3 Buckets
+
+- Lifecycle rules were placed on all raw/transformed S3 buckets to delete all data older than 5 days.
+
+- S3 versioning was not configured for this ETL pipeline seeing as it is just being used by one person.
+
 ## CI/CD Pipeline
 
 The Lambda functions and the Glue jobs are tested and deployed automatically with GitHub Actions through two separate workflows.
@@ -402,22 +424,3 @@ Account-specific identifiers are never hard-coded. The deploy workflows read the
 | `TRANSFORMED_PREFIX`  | every `transform_*` Lambda                 | Folder above `extract_date=` for that source's Parquet output                         |
 | `FLIGHT_DEALS_PREFIX` | `extract_hotel_room_rates`                 | Raw prefix of the airplane ticket rates data in `AWS_AIRPLANE_TICKET_RATES_S3_BUCKET` |
 | `HOTEL_PREFIX`        | `extract_destination_activities`           | Raw prefix of the hotel room rates data in `AWS_HOTEL_ROOM_RATES_S3_BUCKET`           |
-
-## Cost Savings
-
-### Lambda Functions
-
-- Extract Lambda functions have been configured to run on 64-bit ARM architecture instead of x86.
-
-- Transform Lambda functions have been cost optimized to:
-  - Use one shared S3 client instead of up to three with its connection pool sized to the 8 workers.
-  - Short S3 timeouts and capped retries have been configured so a stalled call can’t bill up to the Lambda timeout.
-  - `.parquet` keys are dropped from the batch so if nothing is left it returns SKIPPED instead of raising and being retried.
-  - Snappy compressions were dropped and instead ztsd compressions are being saved into the transformed S3 buckets.
-  - There are no extra buffer copies on upload.
-
-### S3 Buckets
-
-- Lifecycle rules were placed on all raw/transformed S3 buckets to delete all data older than 5 days.
-
-- S3 versioning was not configured for this ETL pipeline seeing as it is just being used by one person.
