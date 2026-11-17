@@ -264,6 +264,7 @@ There's no NAT gateway or internet route. Every interface endpoint must have pri
 
 - The following Transform Lambda Functions have been tuned with AWS Lambda Power Tuning to find the best memory allocation for each function. Each function was tuned individually weighing both cost and execution speed.
   - Transform Airplane Ticket Rates: memory allocation 700 MB
+  - Transform Hotel Room Rates: memory allocation 660 MB
 
 ### S3 Buckets
 
