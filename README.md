@@ -266,6 +266,10 @@ There's no NAT gateway or internet route. Every interface endpoint must have pri
   - Transform Airplane Ticket Rates: memory allocation 700 MB
   - Transform Hotel Room Rates: memory allocation 660 MB
 
+### Glue Job Workflows
+
+- All Glue Job workflows read from the AWS Glue Data Catalog rather than directly from the S3 buckets in order to enable partition pruning and have a centralized schema management system.
+
 ### S3 Buckets
 
 - Lifecycle rules were placed on all raw/transformed S3 buckets to delete all data older than 5 days.
