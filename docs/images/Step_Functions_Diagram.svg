@@ -1,10 +1,10 @@
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "https://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg xmlns="http://www.w3.org/2000/svg" class="sc-satoz gARCuS graph" data-testid="graph" role="img" aria-labelledby="polymath-graph-title" width="4030" height="3099">
+<svg xmlns="http://www.w3.org/2000/svg" class="sc-satoz gARCuS graph" data-testid="graph" role="img" aria-labelledby="polymath-graph-title" width="4096" height="3099">
 <rect width="100%" height="100%" fill="#fff"/>
 <title id="polymath-graph-title">Workflow Studio State Machine Graph</title>
 <g transform="translate(12,12)" class="new-look-graph">
 <g class="nodes">
-<g class="node-container" transform="translate(2002.625,22)">
+<g class="node-container" transform="translate(2036,22)">
 <g>
 <circle class="sc-iMWBiJ jOLdYJ shape" r="22"/>
 <text class="sc-brPLxw dfGTsw label">
@@ -12,7 +12,7 @@
 </text>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,276)">
+<g class="node-container" transform="translate(2036,276)">
 <g class="sc-hknOHE hJEsoj node state container Parallel" data-testid="graph-Extract Parallel" data-state-id="Extract Parallel" data-state-type="Parallel">
 <g class="new-look-state-node ">
 <g class="bounding-box" transform="translate(0,5)">
@@ -460,7 +460,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,748.5)">
+<g class="node-container" transform="translate(2036,748.5)">
 <g class="sc-hknOHE hJEsoj node state container Parallel" data-testid="graph-Transformation Parallel" data-state-id="Transformation Parallel" data-state-type="Parallel">
 <g class="new-look-state-node ">
 <g class="bounding-box" transform="translate(0,5)">
@@ -1099,12 +1099,12 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,1411.5)">
+<g class="node-container" transform="translate(2036,1411.5)">
 <g class="sc-hknOHE hJEsoj node state container Parallel" data-testid="graph-Data Quality Check Parallel" data-state-id="Data Quality Check Parallel" data-state-type="Parallel">
 <g class="new-look-state-node ">
 <g class="bounding-box" transform="translate(0,5)">
-<rect class="sc-bBeLUv GdYkr shape" rx="8" ry="8" x="-2002.625" y="-387.5" width="4005.25" height="770"/>
-<g class="content" transform="translate(-2002.625,-387.5)">
+<rect class="sc-bBeLUv GdYkr shape" rx="8" ry="8" x="-2036" y="-387.5" width="4072" height="770"/>
+<g class="content" transform="translate(-2036,-387.5)">
 <g class="branch" transform="translate(20,92)">
 <g class="branchInsertArea" data-insertion-index="0" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:0" x="-20" y="0" width="20" height="658">
 <rect x="-20" y="0" width="20" height="658" stroke="none" fill="none"/>
@@ -1112,7 +1112,7 @@ g.Placeholder .label {
 </g>
 <g transform="">
 <g class="nodes">
-<g class="node-container" transform="translate(474,26)">
+<g class="node-container" transform="translate(485,26)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Start DQ Evaluation Exchange Rates" data-state-id="Start DQ Evaluation Exchange Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-157.5" y="-26" width="315" height="52" rx="8" ry="8"/>
@@ -1142,7 +1142,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(474,113)">
+<g class="node-container" transform="translate(485,113)">
 <g class="sc-hknOHE hJEsoj node state Wait" data-testid="graph-Wait DQ Evaluation Exchange Rates" data-state-id="Wait DQ Evaluation Exchange Rates" data-state-type="Wait">
 <g class="new-look-state-node ">
 <rect x="-149" y="-26" width="298" height="52" rx="8" ry="8"/>
@@ -1170,7 +1170,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(379.75,200)">
+<g class="node-container" transform="translate(390.75,200)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Evaluation Exchange Rates" data-state-id="Get DQ Evaluation Exchange Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-153.5" y="-26" width="307" height="52" rx="8" ry="8"/>
@@ -1200,7 +1200,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(474,287)">
+<g class="node-container" transform="translate(485,287)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Is DQ Done Exchange Rates" data-state-id="Is DQ Done Exchange Rates" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-123" y="-26" width="246" height="52" rx="8" ry="8"/>
@@ -1228,7 +1228,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(635.5,390.5)">
+<g class="node-container" transform="translate(652,390.5)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Result Exchange Rates" data-state-id="Get DQ Result Exchange Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-132" y="-26" width="264" height="52" rx="8" ry="8"/>
@@ -1258,11 +1258,11 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(157.5,477.5)">
-<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS Exchange Rates" data-state-id="Run Failed - Send SNS Exchange Rates" data-state-type="Task">
+<g class="node-container" transform="translate(168.5,477.5)">
+<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS for Exchange Rates" data-state-id="Run Failed - Send SNS for Exchange Rates" data-state-type="Task">
 <g class="new-look-state-node ">
-<rect x="-157.5" y="-26" width="315" height="52" rx="8" ry="8"/>
-<g class="handle" transform="translate(-157.5,-26)" aria-hidden="true">
+<rect x="-168.5" y="-26" width="337" height="52" rx="8" ry="8"/>
+<g class="handle" transform="translate(-168.5,-26)" aria-hidden="true">
 <circle cx="7" cy="20" r="1.5"/>
 <circle cx="12" cy="20" r="1.5"/>
 <circle cx="7" cy="26" r="1.5"/>
@@ -1270,25 +1270,25 @@ g.Placeholder .label {
 <circle cx="7" cy="32" r="1.5"/>
 <circle cx="12" cy="32" r="1.5"/>
 </g>
-<svg class="icon" x="-139.5" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
+<svg class="icon" x="-150.5" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
 <title>SNS: Publish</title>
 <rect fill="var(--color-background-container-header-zp2eoi, #ffffff)" x="0" y="0" width="48" height="48"/>
 <use href="#icon-service-sns" aria-hidden="true">
 <title>Simple Notification Service</title>
 </use>
 </svg>
-<g class="text-lines" transform="translate(-95.5,-26)">
+<g class="text-lines" transform="translate(-106.5,-26)">
 <text transform="translate(0,18)" class="line1">
 <tspan xml:space="preserve" text-anchor="start">SNS: Publish</tspan>
 </text>
 <text transform="translate(0,36.5)" class="line2 label">
-<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS Exchange Rates</tspan>
+<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS for Exchange Rates</tspan>
 </text>
 </g>
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(157.5,581)">
+<g class="node-container" transform="translate(168.5,581)">
 <g class="sc-hknOHE hJEsoj node state Fail" data-testid="graph-Run Failed Exchange Rates" data-state-id="Run Failed Exchange Rates" data-state-type="Fail">
 <g class="new-look-state-node ">
 <rect x="-120.5" y="-26" width="241" height="52" rx="8" ry="8"/>
@@ -1316,12 +1316,12 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(465.75,650)">
+<g class="node-container" transform="translate(482.25,650)">
 <g>
 <circle class="sc-gFVvzn dNzQPO shape" r="8"/>
 </g>
 </g>
-<g class="node-container" transform="translate(635.5,477.5)">
+<g class="node-container" transform="translate(652,477.5)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Score Check Exchange Rates" data-state-id="Score Check Exchange Rates" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-125.5" y="-26" width="251" height="52" rx="8" ry="8"/>
@@ -1349,7 +1349,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(465.75,581)">
+<g class="node-container" transform="translate(482.25,581)">
 <g class="sc-hknOHE hJEsoj node state Succeed" data-testid="graph-DQ Succeeded Exchange Rates" data-state-id="DQ Succeeded Exchange Rates" data-state-type="Succeed">
 <g class="new-look-state-node ">
 <rect x="-133" y="-26" width="266" height="52" rx="8" ry="8"/>
@@ -1377,7 +1377,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(805.25,581)">
+<g class="node-container" transform="translate(821.75,581)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-DQ Failed - Send SNS for Exchange Rates" data-state-id="DQ Failed - Send SNS for Exchange Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-166.5" y="-26" width="333" height="52" rx="8" ry="8"/>
@@ -1410,17 +1410,17 @@ g.Placeholder .label {
 </g>
 <g class="edges">
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Start DQ Evaluation Exchange Rates:state-Wait DQ Evaluation Exchange Rates:normal" d="M474,52L474,54.916666666666664C474,57.833333333333336,474,63.666666666666664,474,69.5C474,75.33333333333333,474,81.16666666666667,474,84.08333333333333L474,87" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Start DQ Evaluation Exchange Rates:state-Wait DQ Evaluation Exchange Rates:normal" d="M485,52L485,54.916666666666664C485,57.833333333333336,485,63.666666666666664,485,69.5C485,75.33333333333333,485,81.16666666666667,485,84.08333333333333L485,87" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Wait DQ Evaluation Exchange Rates:state-Get DQ Evaluation Exchange Rates:normal" d="M417.6666666666667,139L411.34722222222223,141.91666666666666C405.0277777777778,144.83333333333334,392.3888888888889,150.66666666666666,386.0694444444445,156.5C379.75,162.33333333333334,379.75,168.16666666666666,379.75,171.08333333333334L379.75,174" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Wait DQ Evaluation Exchange Rates:state-Get DQ Evaluation Exchange Rates:normal" d="M428.6666666666667,139L422.34722222222223,141.91666666666666C416.0277777777778,144.83333333333334,403.3888888888889,150.66666666666666,397.0694444444445,156.5C390.75,162.33333333333334,390.75,168.16666666666666,390.75,171.08333333333334L390.75,174" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Evaluation Exchange Rates:state-Is DQ Done Exchange Rates:normal" d="M379.75,226L379.75,228.91666666666666C379.75,231.83333333333334,379.75,237.66666666666666,386.0694444444444,243.5C392.3888888888889,249.33333333333334,405.0277777777778,255.16666666666666,411.34722222222223,258.0833333333333L417.6666666666667,261" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Evaluation Exchange Rates:state-Is DQ Done Exchange Rates:normal" d="M390.75,226L390.75,228.91666666666666C390.75,231.83333333333334,390.75,237.66666666666666,397.0694444444444,243.5C403.3888888888889,249.33333333333334,416.0277777777778,255.16666666666666,422.34722222222223,258.0833333333333L428.6666666666667,261" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Exchange Rates:state-Get DQ Result Exchange Rates:choiceRule:0" d="M555.1400966183575,313L568.5334138486312,317.2916666666667C581.9267310789049,321.5833333333333,608.7133655394524,330.1666666666667,622.1066827697263,338.75C635.5,347.3333333333333,635.5,355.9166666666667,635.5,360.2083333333333L635.5,364.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Exchange Rates-0" class="edge-label" transform="translate(622.1066827697263,338.75)">
+<path id="state-Is DQ Done Exchange Rates:state-Get DQ Result Exchange Rates:choiceRule:0" d="M568.903381642512,313L582.7528180354267,317.2916666666667C596.6022544283413,321.5833333333333,624.3011272141707,330.1666666666667,638.1505636070854,338.75C652,347.3333333333333,652,355.9166666666667,652,360.2083333333333L652,364.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Exchange Rates-0" class="edge-label" transform="translate(638.1505636070854,338.75)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #1</tspan>
@@ -1429,8 +1429,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Exchange Rates:state-Run Failed - Send SNS Exchange Rates:choiceRule:1" d="M351,307.11137440758296L318.75,312.3844786729858C286.5,317.65758293838866,222,328.2037914691943,189.75,342.1018957345971C157.5,356,157.5,373.25,157.5,389.125C157.5,405,157.5,419.5,157.5,429.6666666666667C157.5,439.8333333333333,157.5,445.6666666666667,157.5,448.5833333333333L157.5,451.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Exchange Rates-1" class="edge-label" transform="translate(189.75,342.1018957345971)">
+<path id="state-Is DQ Done Exchange Rates:state-Run Failed - Send SNS for Exchange Rates:choiceRule:1" d="M362,307.11137440758296L329.75,312.3844786729858C297.5,317.65758293838866,233,328.2037914691943,200.75,342.1018957345971C168.5,356,168.5,373.25,168.5,389.125C168.5,405,168.5,419.5,168.5,429.6666666666667C168.5,439.8333333333333,168.5,445.6666666666667,168.5,448.5833333333333L168.5,451.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Exchange Rates-1" class="edge-label" transform="translate(200.75,342.1018957345971)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #2</tspan>
@@ -1439,8 +1439,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Exchange Rates:state-Wait DQ Evaluation Exchange Rates:choiceDefault" d="M530.3333333333334,261L536.6527777777778,258.0833333333333C542.9722222222223,255.16666666666666,555.6111111111112,249.33333333333334,561.9305555555555,239.16666666666666C568.25,229,568.25,214.5,568.25,200C568.25,185.5,568.25,171,561.9305555555555,160.83333333333334C555.6111111111112,150.66666666666666,542.9722222222223,144.83333333333334,536.6527777777778,141.91666666666666L530.3333333333334,139" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Exchange Rates-Default" class="edge-label" transform="translate(561.9305555555555,239.16666666666666)">
+<path id="state-Is DQ Done Exchange Rates:state-Wait DQ Evaluation Exchange Rates:choiceDefault" d="M541.3333333333334,261L547.6527777777778,258.0833333333333C553.9722222222223,255.16666666666666,566.6111111111112,249.33333333333334,572.9305555555555,239.16666666666666C579.25,229,579.25,214.5,579.25,200C579.25,185.5,579.25,171,572.9305555555555,160.83333333333334C566.6111111111112,150.66666666666666,553.9722222222223,144.83333333333334,547.6527777777778,141.91666666666666L541.3333333333334,139" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Exchange Rates-Default" class="edge-label" transform="translate(572.9305555555555,239.16666666666666)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -1449,17 +1449,17 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed - Send SNS Exchange Rates:state-Run Failed Exchange Rates:normal" d="M157.5,503.5L157.5,507.7916666666667C157.5,512.0833333333334,157.5,520.6666666666666,157.5,529.25C157.5,537.8333333333334,157.5,546.4166666666666,157.5,550.7083333333334L157.5,555" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed - Send SNS for Exchange Rates:state-Run Failed Exchange Rates:normal" d="M168.5,503.5L168.5,507.7916666666667C168.5,512.0833333333334,168.5,520.6666666666666,168.5,529.25C168.5,537.8333333333334,168.5,546.4166666666666,168.5,550.7083333333334L168.5,555" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed Exchange Rates:end:normal" d="M157.5,607L157.5,609.9166666666666C157.5,612.8333333333334,157.5,618.6666666666666,207.54620567356514,625.723408741852C257.5924113471303,632.7801508170375,357.6848226942605,641.060301634075,407.73102836782573,645.2003770425938L457.77723404139084,649.3404524511126" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed Exchange Rates:end:normal" d="M168.5,607L168.5,609.9166666666666C168.5,612.8333333333334,168.5,618.6666666666666,219.46271537532417,625.7253229494951C270.42543075064833,632.7839792323235,372.3508615012967,641.0679584646472,423.31357687662086,645.209948080809L474.276292251945,649.3519376969708" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Result Exchange Rates:state-Score Check Exchange Rates:normal" d="M635.5,416.5L635.5,419.4166666666667C635.5,422.3333333333333,635.5,428.1666666666667,635.5,434C635.5,439.8333333333333,635.5,445.6666666666667,635.5,448.5833333333333L635.5,451.5" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Result Exchange Rates:state-Score Check Exchange Rates:normal" d="M652,416.5L652,419.4166666666667C652,422.3333333333333,652,428.1666666666667,652,434C652,439.8333333333333,652,445.6666666666667,652,448.5833333333333L652,451.5" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Score Check Exchange Rates:state-DQ Succeeded Exchange Rates:choiceRule:0" d="M550.2149758454107,503.5L536.1374798711755,507.7916666666667C522.0599838969405,512.0833333333334,493.90499194847024,520.6666666666666,479.8274959742351,529.25C465.75,537.8333333333334,465.75,546.4166666666666,465.75,550.7083333333334L465.75,555" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Score Check Exchange Rates-0" class="edge-label" transform="translate(479.8274959742351,529.25)">
+<path id="state-Score Check Exchange Rates:state-DQ Succeeded Exchange Rates:choiceRule:0" d="M566.7149758454107,503.5L552.6374798711755,507.7916666666667C538.5599838969405,512.0833333333334,510.40499194847024,520.6666666666666,496.3274959742351,529.25C482.25,537.8333333333334,482.25,546.4166666666666,482.25,550.7083333333334L482.25,555" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Exchange Rates-0" class="edge-label" transform="translate(496.3274959742351,529.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #1</tspan>
@@ -1468,8 +1468,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Score Check Exchange Rates:state-DQ Failed - Send SNS for Exchange Rates:choiceDefault" d="M720.7850241545893,503.5L734.8625201288245,507.7916666666667C748.9400161030595,512.0833333333334,777.0950080515298,520.6666666666666,791.1725040257649,529.25C805.25,537.8333333333334,805.25,546.4166666666666,805.25,550.7083333333334L805.25,555" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Score Check Exchange Rates-Default" class="edge-label" transform="translate(791.1725040257649,529.25)">
+<path id="state-Score Check Exchange Rates:state-DQ Failed - Send SNS for Exchange Rates:choiceDefault" d="M737.2850241545893,503.5L751.3625201288245,507.7916666666667C765.4400161030595,512.0833333333334,793.5950080515298,520.6666666666666,807.6725040257649,529.25C821.75,537.8333333333334,821.75,546.4166666666666,821.75,550.7083333333334L821.75,555" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Exchange Rates-Default" class="edge-label" transform="translate(807.6725040257649,529.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -1478,22 +1478,22 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Succeeded Exchange Rates:end:normal" d="M465.75,607L465.75,609.9166666666666C465.75,612.8333333333334,465.75,618.6666666666666,465.75,624.5C465.75,630.3333333333334,465.75,636.1666666666666,465.75,639.0833333333334L465.75,642" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Succeeded Exchange Rates:end:normal" d="M482.25,607L482.25,609.9166666666666C482.25,612.8333333333334,482.25,618.6666666666666,482.25,624.5C482.25,630.3333333333334,482.25,636.1666666666666,482.25,639.0833333333334L482.25,642" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Failed - Send SNS for Exchange Rates:end:normal" d="M805.25,607L805.25,609.9166666666666C805.25,612.8333333333334,805.25,618.6666666666666,749.9962547854792,625.7334673627009C694.7425095709583,632.8002680587351,584.2350191419167,641.1005361174701,528.9812739273959,645.2506701468377L473.72752871287514,649.4008041762053" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Failed - Send SNS for Exchange Rates:end:normal" d="M821.75,607L821.75,609.9166666666666C821.75,612.8333333333334,821.75,618.6666666666666,766.4962547854792,625.7334673627009C711.2425095709583,632.8002680587351,600.7350191419167,641.1005361174701,545.4812739273959,645.2506701468377L490.22752871287514,649.4008041762053" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 </g>
 </g>
-<g class="branchInsertArea" data-insertion-index="1" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:1" x="971.75" y="0" width="20" height="658">
-<rect x="971.75" y="0" width="20" height="658" stroke="none" fill="none"/>
-<path d="M981.75,0 l0,658" stroke="none" fill="none"/>
+<g class="branchInsertArea" data-insertion-index="1" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:1" x="988.25" y="0" width="20" height="658">
+<rect x="988.25" y="0" width="20" height="658" stroke="none" fill="none"/>
+<path d="M998.25,0 l0,658" stroke="none" fill="none"/>
 </g>
 </g>
-<g class="branch" transform="translate(1011.75,92)">
+<g class="branch" transform="translate(1028.25,92)">
 <g transform="">
 <g class="nodes">
-<g class="node-container" transform="translate(465,26)">
+<g class="node-container" transform="translate(476,26)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Start DQ Evaluation Airplane Rates" data-state-id="Start DQ Evaluation Airplane Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-157.5" y="-26" width="315" height="52" rx="8" ry="8"/>
@@ -1523,7 +1523,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(465,113)">
+<g class="node-container" transform="translate(476,113)">
 <g class="sc-hknOHE hJEsoj node state Wait" data-testid="graph-Wait DQ Evaluation Airplane Rates" data-state-id="Wait DQ Evaluation Airplane Rates" data-state-type="Wait">
 <g class="new-look-state-node ">
 <rect x="-145.5" y="-26" width="291" height="52" rx="8" ry="8"/>
@@ -1551,7 +1551,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(370.75,200)">
+<g class="node-container" transform="translate(381.75,200)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Evaluation Airplane Rates" data-state-id="Get DQ Evaluation Airplane Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-153.5" y="-26" width="307" height="52" rx="8" ry="8"/>
@@ -1581,7 +1581,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(465,287)">
+<g class="node-container" transform="translate(476,287)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Is DQ Done Airplane Rates" data-state-id="Is DQ Done Airplane Rates" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-120" y="-26" width="240" height="52" rx="8" ry="8"/>
@@ -1609,7 +1609,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(623,390.5)">
+<g class="node-container" transform="translate(639.5,390.5)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Result Airplane Rates" data-state-id="Get DQ Result Airplane Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-128.5" y="-26" width="257" height="52" rx="8" ry="8"/>
@@ -1639,11 +1639,11 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(154,477.5)">
-<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS Airplane Rates" data-state-id="Run Failed - Send SNS Airplane Rates" data-state-type="Task">
+<g class="node-container" transform="translate(165,477.5)">
+<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS for Airplane Rates" data-state-id="Run Failed - Send SNS for Airplane Rates" data-state-type="Task">
 <g class="new-look-state-node ">
-<rect x="-154" y="-26" width="308" height="52" rx="8" ry="8"/>
-<g class="handle" transform="translate(-154,-26)" aria-hidden="true">
+<rect x="-165" y="-26" width="330" height="52" rx="8" ry="8"/>
+<g class="handle" transform="translate(-165,-26)" aria-hidden="true">
 <circle cx="7" cy="20" r="1.5"/>
 <circle cx="12" cy="20" r="1.5"/>
 <circle cx="7" cy="26" r="1.5"/>
@@ -1651,25 +1651,25 @@ g.Placeholder .label {
 <circle cx="7" cy="32" r="1.5"/>
 <circle cx="12" cy="32" r="1.5"/>
 </g>
-<svg class="icon" x="-136" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
+<svg class="icon" x="-147" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
 <title>SNS: Publish</title>
 <rect fill="var(--color-background-container-header-zp2eoi, #ffffff)" x="0" y="0" width="48" height="48"/>
 <use href="#icon-service-sns" aria-hidden="true">
 <title>Simple Notification Service</title>
 </use>
 </svg>
-<g class="text-lines" transform="translate(-92,-26)">
+<g class="text-lines" transform="translate(-103,-26)">
 <text transform="translate(0,18)" class="line1">
 <tspan xml:space="preserve" text-anchor="start">SNS: Publish</tspan>
 </text>
 <text transform="translate(0,36.5)" class="line2 label">
-<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS Airplane Rates</tspan>
+<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS for Airplane Rates</tspan>
 </text>
 </g>
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(154,581)">
+<g class="node-container" transform="translate(165,581)">
 <g class="sc-hknOHE hJEsoj node state Fail" data-testid="graph-Run Failed Airplane Rates" data-state-id="Run Failed Airplane Rates" data-state-type="Fail">
 <g class="new-look-state-node ">
 <rect x="-120" y="-26" width="240" height="52" rx="8" ry="8"/>
@@ -1697,12 +1697,12 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(456.75,650)">
+<g class="node-container" transform="translate(473.25,650)">
 <g>
 <circle class="sc-gFVvzn dNzQPO shape" r="8"/>
 </g>
 </g>
-<g class="node-container" transform="translate(623,477.5)">
+<g class="node-container" transform="translate(639.5,477.5)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Score Check Airplane Rates" data-state-id="Score Check Airplane Rates" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-122" y="-26" width="244" height="52" rx="8" ry="8"/>
@@ -1730,7 +1730,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(456.75,581)">
+<g class="node-container" transform="translate(473.25,581)">
 <g class="sc-hknOHE hJEsoj node state Succeed" data-testid="graph-DQ Succeeded Airplane Rates" data-state-id="DQ Succeeded Airplane Rates" data-state-type="Succeed">
 <g class="new-look-state-node ">
 <rect x="-129.5" y="-26" width="259" height="52" rx="8" ry="8"/>
@@ -1758,7 +1758,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(789.25,581)">
+<g class="node-container" transform="translate(805.75,581)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-DQ Failed - Send SNS for Airplane Rates" data-state-id="DQ Failed - Send SNS for Airplane Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-163" y="-26" width="326" height="52" rx="8" ry="8"/>
@@ -1791,17 +1791,17 @@ g.Placeholder .label {
 </g>
 <g class="edges">
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Start DQ Evaluation Airplane Rates:state-Wait DQ Evaluation Airplane Rates:normal" d="M465,52L465,54.916666666666664C465,57.833333333333336,465,63.666666666666664,465,69.5C465,75.33333333333333,465,81.16666666666667,465,84.08333333333333L465,87" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Start DQ Evaluation Airplane Rates:state-Wait DQ Evaluation Airplane Rates:normal" d="M476,52L476,54.916666666666664C476,57.833333333333336,476,63.666666666666664,476,69.5C476,75.33333333333333,476,81.16666666666667,476,84.08333333333333L476,87" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Wait DQ Evaluation Airplane Rates:state-Get DQ Evaluation Airplane Rates:normal" d="M408.6666666666667,139L402.34722222222223,141.91666666666666C396.0277777777778,144.83333333333334,383.3888888888889,150.66666666666666,377.0694444444445,156.5C370.75,162.33333333333334,370.75,168.16666666666666,370.75,171.08333333333334L370.75,174" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Wait DQ Evaluation Airplane Rates:state-Get DQ Evaluation Airplane Rates:normal" d="M419.6666666666667,139L413.34722222222223,141.91666666666666C407.0277777777778,144.83333333333334,394.3888888888889,150.66666666666666,388.0694444444445,156.5C381.75,162.33333333333334,381.75,168.16666666666666,381.75,171.08333333333334L381.75,174" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Evaluation Airplane Rates:state-Is DQ Done Airplane Rates:normal" d="M370.75,226L370.75,228.91666666666666C370.75,231.83333333333334,370.75,237.66666666666666,377.0694444444444,243.5C383.3888888888889,249.33333333333334,396.0277777777778,255.16666666666666,402.34722222222223,258.0833333333333L408.6666666666667,261" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Evaluation Airplane Rates:state-Is DQ Done Airplane Rates:normal" d="M381.75,226L381.75,228.91666666666666C381.75,231.83333333333334,381.75,237.66666666666666,388.0694444444444,243.5C394.3888888888889,249.33333333333334,407.0277777777778,255.16666666666666,413.34722222222223,258.0833333333333L419.6666666666667,261" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Airplane Rates:state-Get DQ Result Airplane Rates:choiceRule:0" d="M544.3816425120773,313L557.4847020933977,317.2916666666667C570.5877616747182,321.5833333333333,596.7938808373591,330.1666666666667,609.8969404186795,338.75C623,347.3333333333333,623,355.9166666666667,623,360.2083333333333L623,364.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Airplane Rates-0" class="edge-label" transform="translate(609.8969404186795,338.75)">
+<path id="state-Is DQ Done Airplane Rates:state-Get DQ Result Airplane Rates:choiceRule:0" d="M558.1449275362319,313L571.7041062801933,317.2916666666667C585.2632850241546,321.5833333333333,612.3816425120773,330.1666666666667,625.9408212560387,338.75C639.5,347.3333333333333,639.5,355.9166666666667,639.5,360.2083333333333L639.5,364.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Airplane Rates-0" class="edge-label" transform="translate(625.9408212560387,338.75)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #1</tspan>
@@ -1810,8 +1810,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Airplane Rates:state-Run Failed - Send SNS Airplane Rates:choiceRule:1" d="M345,306.96784565916397L313.1666666666667,312.2648713826366C281.3333333333333,317.5618971061093,217.66666666666666,328.15594855305466,185.83333333333334,342.0779742765273C154,356,154,373.25,154,389.125C154,405,154,419.5,154,429.6666666666667C154,439.8333333333333,154,445.6666666666667,154,448.5833333333333L154,451.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Airplane Rates-1" class="edge-label" transform="translate(185.83333333333334,342.0779742765273)">
+<path id="state-Is DQ Done Airplane Rates:state-Run Failed - Send SNS for Airplane Rates:choiceRule:1" d="M356,306.96784565916397L324.1666666666667,312.2648713826366C292.3333333333333,317.5618971061093,228.66666666666666,328.15594855305466,196.83333333333334,342.0779742765273C165,356,165,373.25,165,389.125C165,405,165,419.5,165,429.6666666666667C165,439.8333333333333,165,445.6666666666667,165,448.5833333333333L165,451.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Airplane Rates-1" class="edge-label" transform="translate(196.83333333333334,342.0779742765273)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #2</tspan>
@@ -1820,8 +1820,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Airplane Rates:state-Wait DQ Evaluation Airplane Rates:choiceDefault" d="M521.3333333333334,261L527.6527777777778,258.0833333333333C533.9722222222223,255.16666666666666,546.6111111111112,249.33333333333334,552.9305555555555,239.16666666666666C559.25,229,559.25,214.5,559.25,200C559.25,185.5,559.25,171,552.9305555555555,160.83333333333334C546.6111111111112,150.66666666666666,533.9722222222223,144.83333333333334,527.6527777777778,141.91666666666666L521.3333333333334,139" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Airplane Rates-Default" class="edge-label" transform="translate(552.9305555555555,239.16666666666666)">
+<path id="state-Is DQ Done Airplane Rates:state-Wait DQ Evaluation Airplane Rates:choiceDefault" d="M532.3333333333334,261L538.6527777777778,258.0833333333333C544.9722222222223,255.16666666666666,557.6111111111112,249.33333333333334,563.9305555555555,239.16666666666666C570.25,229,570.25,214.5,570.25,200C570.25,185.5,570.25,171,563.9305555555555,160.83333333333334C557.6111111111112,150.66666666666666,544.9722222222223,144.83333333333334,538.6527777777778,141.91666666666666L532.3333333333334,139" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Airplane Rates-Default" class="edge-label" transform="translate(563.9305555555555,239.16666666666666)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -1830,17 +1830,17 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed - Send SNS Airplane Rates:state-Run Failed Airplane Rates:normal" d="M154,503.5L154,507.7916666666667C154,512.0833333333334,154,520.6666666666666,154,529.25C154,537.8333333333334,154,546.4166666666666,154,550.7083333333334L154,555" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed - Send SNS for Airplane Rates:state-Run Failed Airplane Rates:normal" d="M165,503.5L165,507.7916666666667C165,512.0833333333334,165,520.6666666666666,165,529.25C165,537.8333333333334,165,546.4166666666666,165,550.7083333333334L165,555" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed Airplane Rates:end:normal" d="M154,607L154,609.9166666666666C154,612.8333333333334,154,618.6666666666666,203.12970454365924,625.7214257061271C252.25940908731846,632.7761847455876,350.5188181746369,641.052369491175,399.6485227182962,645.1904618639688L448.77822726195546,649.3285542367626" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed Airplane Rates:end:normal" d="M165,607L165,609.9166666666666C165,612.8333333333334,165,618.6666666666666,215.04620567356514,625.723408741852C265.0924113471303,632.7801508170375,365.1848226942605,641.060301634075,415.23102836782573,645.2003770425938L465.27723404139084,649.3404524511126" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Result Airplane Rates:state-Score Check Airplane Rates:normal" d="M623,416.5L623,419.4166666666667C623,422.3333333333333,623,428.1666666666667,623,434C623,439.8333333333333,623,445.6666666666667,623,448.5833333333333L623,451.5" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Result Airplane Rates:state-Score Check Airplane Rates:normal" d="M639.5,416.5L639.5,419.4166666666667C639.5,422.3333333333333,639.5,428.1666666666667,639.5,434C639.5,439.8333333333333,639.5,445.6666666666667,639.5,448.5833333333333L639.5,451.5" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Score Check Airplane Rates:state-DQ Succeeded Airplane Rates:choiceRule:0" d="M539.4734299516908,503.5L525.686191626409,507.7916666666667C511.8989533011272,512.0833333333334,484.3244766505636,520.6666666666666,470.5372383252818,529.25C456.75,537.8333333333334,456.75,546.4166666666666,456.75,550.7083333333334L456.75,555" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Score Check Airplane Rates-0" class="edge-label" transform="translate(470.5372383252818,529.25)">
+<path id="state-Score Check Airplane Rates:state-DQ Succeeded Airplane Rates:choiceRule:0" d="M555.9734299516908,503.5L542.186191626409,507.7916666666667C528.3989533011272,512.0833333333334,500.8244766505636,520.6666666666666,487.0372383252818,529.25C473.25,537.8333333333334,473.25,546.4166666666666,473.25,550.7083333333334L473.25,555" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Airplane Rates-0" class="edge-label" transform="translate(487.0372383252818,529.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #1</tspan>
@@ -1849,8 +1849,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Score Check Airplane Rates:state-DQ Failed - Send SNS for Airplane Rates:choiceDefault" d="M706.5265700483092,503.5L720.3138083735909,507.7916666666667C734.1010466988728,512.0833333333334,761.6755233494364,520.6666666666666,775.4627616747181,529.25C789.25,537.8333333333334,789.25,546.4166666666666,789.25,550.7083333333334L789.25,555" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Score Check Airplane Rates-Default" class="edge-label" transform="translate(775.4627616747181,529.25)">
+<path id="state-Score Check Airplane Rates:state-DQ Failed - Send SNS for Airplane Rates:choiceDefault" d="M723.0265700483092,503.5L736.8138083735909,507.7916666666667C750.6010466988728,512.0833333333334,778.1755233494364,520.6666666666666,791.9627616747181,529.25C805.75,537.8333333333334,805.75,546.4166666666666,805.75,550.7083333333334L805.75,555" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Airplane Rates-Default" class="edge-label" transform="translate(791.9627616747181,529.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -1859,22 +1859,22 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Succeeded Airplane Rates:end:normal" d="M456.75,607L456.75,609.9166666666666C456.75,612.8333333333334,456.75,618.6666666666666,456.75,624.5C456.75,630.3333333333334,456.75,636.1666666666666,456.75,639.0833333333334L456.75,642" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Succeeded Airplane Rates:end:normal" d="M473.25,607L473.25,609.9166666666666C473.25,612.8333333333334,473.25,618.6666666666666,473.25,624.5C473.25,630.3333333333334,473.25,636.1666666666666,473.25,639.0833333333334L473.25,642" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Failed - Send SNS for Airplane Rates:end:normal" d="M789.25,607L789.25,609.9166666666666C789.25,612.8333333333334,789.25,618.6666666666666,735.1627627981603,625.7313770886624C681.0755255963207,632.7960875106581,572.9010511926416,641.0921750213162,518.813813990802,645.2402187766453L464.7265767889624,649.3882625319743" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Failed - Send SNS for Airplane Rates:end:normal" d="M805.75,607L805.75,609.9166666666666C805.75,612.8333333333334,805.75,618.6666666666666,751.6627627981603,625.7313770886624C697.5755255963209,632.7960875106581,589.4010511926416,641.0921750213162,535.313813990802,645.2402187766453L481.2265767889624,649.3882625319743" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 </g>
 </g>
-<g class="branchInsertArea" data-insertion-index="2" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:2" x="952.25" y="0" width="20" height="658">
-<rect x="952.25" y="0" width="20" height="658" stroke="none" fill="none"/>
-<path d="M962.25,0 l0,658" stroke="none" fill="none"/>
+<g class="branchInsertArea" data-insertion-index="2" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:2" x="968.75" y="0" width="20" height="658">
+<rect x="968.75" y="0" width="20" height="658" stroke="none" fill="none"/>
+<path d="M978.75,0 l0,658" stroke="none" fill="none"/>
 </g>
 </g>
-<g class="branch" transform="translate(1984,92)">
+<g class="branch" transform="translate(2017,92)">
 <g transform="">
 <g class="nodes">
-<g class="node-container" transform="translate(441.75,26)">
+<g class="node-container" transform="translate(453.25,26)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Start DQ Evaluation Hotel Rates" data-state-id="Start DQ Evaluation Hotel Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-157.5" y="-26" width="315" height="52" rx="8" ry="8"/>
@@ -1904,7 +1904,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(441.75,113)">
+<g class="node-container" transform="translate(453.25,113)">
 <g class="sc-hknOHE hJEsoj node state Wait" data-testid="graph-Wait DQ Evaluation Hotel Rates" data-state-id="Wait DQ Evaluation Hotel Rates" data-state-type="Wait">
 <g class="new-look-state-node ">
 <rect x="-136.5" y="-26" width="273" height="52" rx="8" ry="8"/>
@@ -1932,7 +1932,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(347.5,200)">
+<g class="node-container" transform="translate(359,200)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Evaluation Hotel Rates" data-state-id="Get DQ Evaluation Hotel Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-153.5" y="-26" width="307" height="52" rx="8" ry="8"/>
@@ -1962,7 +1962,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(441.75,287)">
+<g class="node-container" transform="translate(453.25,287)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Is DQ Done Hotel Rates" data-state-id="Is DQ Done Hotel Rates" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-120" y="-26" width="240" height="52" rx="8" ry="8"/>
@@ -1990,7 +1990,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(594,390.5)">
+<g class="node-container" transform="translate(611.25,390.5)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Result Hotel Rates" data-state-id="Get DQ Result Hotel Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-120" y="-26" width="240" height="52" rx="8" ry="8"/>
@@ -2020,11 +2020,11 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(144.5,477.5)">
-<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS Hotel Rates" data-state-id="Run Failed - Send SNS Hotel Rates" data-state-type="Task">
+<g class="node-container" transform="translate(156,477.5)">
+<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS for Hotel Rates" data-state-id="Run Failed - Send SNS for Hotel Rates" data-state-type="Task">
 <g class="new-look-state-node ">
-<rect x="-144.5" y="-26" width="289" height="52" rx="8" ry="8"/>
-<g class="handle" transform="translate(-144.5,-26)" aria-hidden="true">
+<rect x="-156" y="-26" width="312" height="52" rx="8" ry="8"/>
+<g class="handle" transform="translate(-156,-26)" aria-hidden="true">
 <circle cx="7" cy="20" r="1.5"/>
 <circle cx="12" cy="20" r="1.5"/>
 <circle cx="7" cy="26" r="1.5"/>
@@ -2032,25 +2032,25 @@ g.Placeholder .label {
 <circle cx="7" cy="32" r="1.5"/>
 <circle cx="12" cy="32" r="1.5"/>
 </g>
-<svg class="icon" x="-126.5" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
+<svg class="icon" x="-138" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
 <title>SNS: Publish</title>
 <rect fill="var(--color-background-container-header-zp2eoi, #ffffff)" x="0" y="0" width="48" height="48"/>
 <use href="#icon-service-sns" aria-hidden="true">
 <title>Simple Notification Service</title>
 </use>
 </svg>
-<g class="text-lines" transform="translate(-82.5,-26)">
+<g class="text-lines" transform="translate(-94,-26)">
 <text transform="translate(0,18)" class="line1">
 <tspan xml:space="preserve" text-anchor="start">SNS: Publish</tspan>
 </text>
 <text transform="translate(0,36.5)" class="line2 label">
-<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS Hotel Rates</tspan>
+<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS for Hotel Rates</tspan>
 </text>
 </g>
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(144.5,581)">
+<g class="node-container" transform="translate(156,581)">
 <g class="sc-hknOHE hJEsoj node state Fail" data-testid="graph-Run Failed Hotel Rates" data-state-id="Run Failed Hotel Rates" data-state-type="Fail">
 <g class="new-look-state-node ">
 <rect x="-120" y="-26" width="240" height="52" rx="8" ry="8"/>
@@ -2078,12 +2078,12 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(437,650)">
+<g class="node-container" transform="translate(454.25,650)">
 <g>
 <circle class="sc-gFVvzn dNzQPO shape" r="8"/>
 </g>
 </g>
-<g class="node-container" transform="translate(594,477.5)">
+<g class="node-container" transform="translate(611.25,477.5)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Score Check Hotel Rates" data-state-id="Score Check Hotel Rates" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-120" y="-26" width="240" height="52" rx="8" ry="8"/>
@@ -2111,7 +2111,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(437,581)">
+<g class="node-container" transform="translate(454.25,581)">
 <g class="sc-hknOHE hJEsoj node state Succeed" data-testid="graph-DQ Succeeded Hotel Rates" data-state-id="DQ Succeeded Hotel Rates" data-state-type="Succeed">
 <g class="new-look-state-node ">
 <rect x="-120.5" y="-26" width="241" height="52" rx="8" ry="8"/>
@@ -2139,7 +2139,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(751,581)">
+<g class="node-container" transform="translate(768.25,581)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-DQ Failed - Send SNS for Hotel Rates" data-state-id="DQ Failed - Send SNS for Hotel Rates" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-153.5" y="-26" width="307" height="52" rx="8" ry="8"/>
@@ -2172,17 +2172,17 @@ g.Placeholder .label {
 </g>
 <g class="edges">
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Start DQ Evaluation Hotel Rates:state-Wait DQ Evaluation Hotel Rates:normal" d="M441.75,52L441.75,54.916666666666664C441.75,57.833333333333336,441.75,63.666666666666664,441.75,69.5C441.75,75.33333333333333,441.75,81.16666666666667,441.75,84.08333333333333L441.75,87" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Start DQ Evaluation Hotel Rates:state-Wait DQ Evaluation Hotel Rates:normal" d="M453.25,52L453.25,54.916666666666664C453.25,57.833333333333336,453.25,63.666666666666664,453.25,69.5C453.25,75.33333333333333,453.25,81.16666666666667,453.25,84.08333333333333L453.25,87" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Wait DQ Evaluation Hotel Rates:state-Get DQ Evaluation Hotel Rates:normal" d="M385.4166666666667,139L379.09722222222223,141.91666666666666C372.7777777777778,144.83333333333334,360.1388888888889,150.66666666666666,353.8194444444445,156.5C347.5,162.33333333333334,347.5,168.16666666666666,347.5,171.08333333333334L347.5,174" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Wait DQ Evaluation Hotel Rates:state-Get DQ Evaluation Hotel Rates:normal" d="M396.9166666666667,139L390.59722222222223,141.91666666666666C384.2777777777778,144.83333333333334,371.6388888888889,150.66666666666666,365.3194444444445,156.5C359,162.33333333333334,359,168.16666666666666,359,171.08333333333334L359,174" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Evaluation Hotel Rates:state-Is DQ Done Hotel Rates:normal" d="M347.5,226L347.5,228.91666666666666C347.5,231.83333333333334,347.5,237.66666666666666,353.8194444444444,243.5C360.1388888888889,249.33333333333334,372.7777777777778,255.16666666666666,379.09722222222223,258.0833333333333L385.4166666666667,261" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Evaluation Hotel Rates:state-Is DQ Done Hotel Rates:normal" d="M359,226L359,228.91666666666666C359,231.83333333333334,359,237.66666666666666,365.3194444444444,243.5C371.6388888888889,249.33333333333334,384.2777777777778,255.16666666666666,390.59722222222223,258.0833333333333L396.9166666666667,261" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Hotel Rates:state-Get DQ Result Hotel Rates:choiceRule:0" d="M518.2427536231884,313L530.868961352657,317.2916666666667C543.4951690821256,321.5833333333333,568.7475845410628,330.1666666666667,581.3737922705315,338.75C594,347.3333333333333,594,355.9166666666667,594,360.2083333333333L594,364.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Hotel Rates-0" class="edge-label" transform="translate(581.3737922705315,338.75)">
+<path id="state-Is DQ Done Hotel Rates:state-Get DQ Result Hotel Rates:choiceRule:0" d="M532.6316425120773,313L545.7347020933977,317.2916666666667C558.8377616747182,321.5833333333333,585.0438808373591,330.1666666666667,598.1469404186795,338.75C611.25,347.3333333333333,611.25,355.9166666666667,611.25,360.2083333333333L611.25,364.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Hotel Rates-0" class="edge-label" transform="translate(598.1469404186795,338.75)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #1</tspan>
@@ -2191,8 +2191,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Hotel Rates:state-Run Failed - Send SNS Hotel Rates:choiceRule:1" d="M321.75,307.8915054667788L292.2083333333333,313.03458788898234C262.6666666666667,318.17767031118586,203.58333333333334,328.46383515559296,174.04166666666666,342.2319175777964C144.5,356,144.5,373.25,144.5,389.125C144.5,405,144.5,419.5,144.5,429.6666666666667C144.5,439.8333333333333,144.5,445.6666666666667,144.5,448.5833333333333L144.5,451.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Hotel Rates-1" class="edge-label" transform="translate(174.04166666666666,342.2319175777964)">
+<path id="state-Is DQ Done Hotel Rates:state-Run Failed - Send SNS for Hotel Rates:choiceRule:1" d="M333.25,307.8915054667788L303.7083333333333,313.03458788898234C274.1666666666667,318.17767031118586,215.08333333333334,328.46383515559296,185.54166666666666,342.2319175777964C156,356,156,373.25,156,389.125C156,405,156,419.5,156,429.6666666666667C156,439.8333333333333,156,445.6666666666667,156,448.5833333333333L156,451.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Hotel Rates-1" class="edge-label" transform="translate(185.54166666666666,342.2319175777964)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #2</tspan>
@@ -2201,8 +2201,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Hotel Rates:state-Wait DQ Evaluation Hotel Rates:choiceDefault" d="M498.0833333333333,261L504.40277777777777,258.0833333333333C510.7222222222222,255.16666666666666,523.3611111111111,249.33333333333334,529.6805555555555,239.16666666666666C536,229,536,214.5,536,200C536,185.5,536,171,529.6805555555555,160.83333333333334C523.3611111111111,150.66666666666666,510.7222222222222,144.83333333333334,504.40277777777777,141.91666666666666L498.0833333333333,139" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Hotel Rates-Default" class="edge-label" transform="translate(529.6805555555555,239.16666666666666)">
+<path id="state-Is DQ Done Hotel Rates:state-Wait DQ Evaluation Hotel Rates:choiceDefault" d="M509.5833333333333,261L515.9027777777777,258.0833333333333C522.2222222222222,255.16666666666666,534.8611111111111,249.33333333333334,541.1805555555555,239.16666666666666C547.5,229,547.5,214.5,547.5,200C547.5,185.5,547.5,171,541.1805555555555,160.83333333333334C534.8611111111111,150.66666666666666,522.2222222222222,144.83333333333334,515.9027777777777,141.91666666666666L509.5833333333333,139" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Hotel Rates-Default" class="edge-label" transform="translate(541.1805555555555,239.16666666666666)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -2211,17 +2211,17 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed - Send SNS Hotel Rates:state-Run Failed Hotel Rates:normal" d="M144.5,503.5L144.5,507.7916666666667C144.5,512.0833333333334,144.5,520.6666666666666,144.5,529.25C144.5,537.8333333333334,144.5,546.4166666666666,144.5,550.7083333333334L144.5,555" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed - Send SNS for Hotel Rates:state-Run Failed Hotel Rates:normal" d="M156,503.5L156,507.7916666666667C156,512.0833333333334,156,520.6666666666666,156,529.25C156,537.8333333333334,156,546.4166666666666,156,550.7083333333334L156,555" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed Hotel Rates:end:normal" d="M144.5,607L144.5,609.9166666666666C144.5,612.8333333333334,144.5,618.6666666666666,191.92170480837527,625.7175332397045C239.34340961675056,632.7683998127424,334.1868192335011,641.0367996254847,381.6085240418765,645.170999531856L429.0302288502517,649.3051994382271" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed Hotel Rates:end:normal" d="M156,607L156,609.9166666666666C156,612.8333333333334,156,618.6666666666666,204.37984680008466,625.7197494050924C252.75969360016927,632.7728321435183,349.51938720033854,641.0456642870365,397.8992340004232,645.1820803587956L446.2790808005078,649.3184964305548" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Result Hotel Rates:state-Score Check Hotel Rates:normal" d="M594,416.5L594,419.4166666666667C594,422.3333333333333,594,428.1666666666667,594,434C594,439.8333333333333,594,445.6666666666667,594,448.5833333333333L594,451.5" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Result Hotel Rates:state-Score Check Hotel Rates:normal" d="M611.25,416.5L611.25,419.4166666666667C611.25,422.3333333333333,611.25,428.1666666666667,611.25,434C611.25,439.8333333333333,611.25,445.6666666666667,611.25,448.5833333333333L611.25,451.5" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Score Check Hotel Rates:state-DQ Succeeded Hotel Rates:choiceRule:0" d="M515.1207729468599,503.5L502.10064412238324,507.7916666666667C489.08051529790663,512.0833333333334,463.0402576489533,520.6666666666666,450.0201288244766,529.25C437,537.8333333333334,437,546.4166666666666,437,550.7083333333334L437,555" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Score Check Hotel Rates-0" class="edge-label" transform="translate(450.0201288244766,529.25)">
+<path id="state-Score Check Hotel Rates:state-DQ Succeeded Hotel Rates:choiceRule:0" d="M532.3707729468599,503.5L519.3506441223832,507.7916666666667C506.33051529790663,512.0833333333334,480.2902576489533,520.6666666666666,467.2701288244766,529.25C454.25,537.8333333333334,454.25,546.4166666666666,454.25,550.7083333333334L454.25,555" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Hotel Rates-0" class="edge-label" transform="translate(467.2701288244766,529.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #1</tspan>
@@ -2230,8 +2230,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Score Check Hotel Rates:state-DQ Failed - Send SNS for Hotel Rates:choiceDefault" d="M672.8792270531401,503.5L685.8993558776168,507.7916666666667C698.9194847020934,512.0833333333334,724.9597423510468,520.6666666666666,737.9798711755234,529.25C751,537.8333333333334,751,546.4166666666666,751,550.7083333333334L751,555" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Score Check Hotel Rates-Default" class="edge-label" transform="translate(737.9798711755234,529.25)">
+<path id="state-Score Check Hotel Rates:state-DQ Failed - Send SNS for Hotel Rates:choiceDefault" d="M690.1292270531401,503.5L703.1493558776168,507.7916666666667C716.1694847020934,512.0833333333334,742.2097423510468,520.6666666666666,755.2298711755234,529.25C768.25,537.8333333333334,768.25,546.4166666666666,768.25,550.7083333333334L768.25,555" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Hotel Rates-Default" class="edge-label" transform="translate(755.2298711755234,529.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -2240,22 +2240,22 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Succeeded Hotel Rates:end:normal" d="M437,607L437,609.9166666666666C437,612.8333333333334,437,618.6666666666666,437,624.5C437,630.3333333333334,437,636.1666666666666,437,639.0833333333334L437,642" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Succeeded Hotel Rates:end:normal" d="M454.25,607L454.25,609.9166666666666C454.25,612.8333333333334,454.25,618.6666666666666,454.25,624.5C454.25,630.3333333333334,454.25,636.1666666666666,454.25,639.0833333333334L454.25,642" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Failed - Send SNS for Hotel Rates:end:normal" d="M751,607L751,609.9166666666666C751,612.8333333333334,751,618.6666666666666,699.995624898712,625.7254083813679C648.991249797424,632.7841500960691,546.9824995948479,641.0683001921382,495.97812449355996,645.2103752401728L444.97374939227194,649.3524502882073" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Failed - Send SNS for Hotel Rates:end:normal" d="M768.25,607L768.25,609.9166666666666C768.25,612.8333333333334,768.25,618.6666666666666,717.245624898712,625.7254083813679C666.241249797424,632.7841500960691,564.2324995948479,641.0683001921382,513.2281244935599,645.2103752401728L462.22374939227194,649.3524502882073" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 </g>
 </g>
-<g class="branchInsertArea" data-insertion-index="3" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:3" x="904.5" y="0" width="20" height="658">
-<rect x="904.5" y="0" width="20" height="658" stroke="none" fill="none"/>
-<path d="M914.5,0 l0,658" stroke="none" fill="none"/>
+<g class="branchInsertArea" data-insertion-index="3" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:3" x="921.75" y="0" width="20" height="658">
+<rect x="921.75" y="0" width="20" height="658" stroke="none" fill="none"/>
+<path d="M931.75,0 l0,658" stroke="none" fill="none"/>
 </g>
 </g>
-<g class="branch" transform="translate(2908.5,92)">
+<g class="branch" transform="translate(2958.75,92)">
 <g transform="">
 <g class="nodes">
-<g class="node-container" transform="translate(526.5,26)">
+<g class="node-container" transform="translate(537.5,26)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Start DQ Evaluation Destination Activities" data-state-id="Start DQ Evaluation Destination Activities" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-168" y="-26" width="336" height="52" rx="8" ry="8"/>
@@ -2285,7 +2285,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(526.5,113)">
+<g class="node-container" transform="translate(537.5,113)">
 <g class="sc-hknOHE hJEsoj node state Wait" data-testid="graph-Wait DQ Evaluation Destination Activities" data-state-id="Wait DQ Evaluation Destination Activities" data-state-type="Wait">
 <g class="new-look-state-node ">
 <rect x="-167" y="-26" width="334" height="52" rx="8" ry="8"/>
@@ -2313,7 +2313,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(427.25,200)">
+<g class="node-container" transform="translate(438.25,200)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Evaluation Destination Activities" data-state-id="Get DQ Evaluation Destination Activities" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-163.5" y="-26" width="327" height="52" rx="8" ry="8"/>
@@ -2343,7 +2343,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(526.5,287)">
+<g class="node-container" transform="translate(537.5,287)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Is DQ Done Destination Activities" data-state-id="Is DQ Done Destination Activities" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-140.5" y="-26" width="281" height="52" rx="8" ry="8"/>
@@ -2371,7 +2371,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(705.5,390.5)">
+<g class="node-container" transform="translate(722,390.5)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Result Destination Activities" data-state-id="Get DQ Result Destination Activities" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-149.5" y="-26" width="299" height="52" rx="8" ry="8"/>
@@ -2401,11 +2401,11 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(175,477.5)">
-<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS Destination Activities" data-state-id="Run Failed - Send SNS Destination Activities" data-state-type="Task">
+<g class="node-container" transform="translate(186,477.5)">
+<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS for Destination Activities" data-state-id="Run Failed - Send SNS for Destination Activities" data-state-type="Task">
 <g class="new-look-state-node ">
-<rect x="-175" y="-26" width="350" height="52" rx="8" ry="8"/>
-<g class="handle" transform="translate(-175,-26)" aria-hidden="true">
+<rect x="-186" y="-26" width="372" height="52" rx="8" ry="8"/>
+<g class="handle" transform="translate(-186,-26)" aria-hidden="true">
 <circle cx="7" cy="20" r="1.5"/>
 <circle cx="12" cy="20" r="1.5"/>
 <circle cx="7" cy="26" r="1.5"/>
@@ -2413,25 +2413,25 @@ g.Placeholder .label {
 <circle cx="7" cy="32" r="1.5"/>
 <circle cx="12" cy="32" r="1.5"/>
 </g>
-<svg class="icon" x="-157" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
+<svg class="icon" x="-168" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
 <title>SNS: Publish</title>
 <rect fill="var(--color-background-container-header-zp2eoi, #ffffff)" x="0" y="0" width="48" height="48"/>
 <use href="#icon-service-sns" aria-hidden="true">
 <title>Simple Notification Service</title>
 </use>
 </svg>
-<g class="text-lines" transform="translate(-113,-26)">
+<g class="text-lines" transform="translate(-124,-26)">
 <text transform="translate(0,18)" class="line1">
 <tspan xml:space="preserve" text-anchor="start">SNS: Publish</tspan>
 </text>
 <text transform="translate(0,36.5)" class="line2 label">
-<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS Destination Activities</tspan>
+<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS for Destination Activities</tspan>
 </text>
 </g>
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(175,581)">
+<g class="node-container" transform="translate(186,581)">
 <g class="sc-hknOHE hJEsoj node state Fail" data-testid="graph-Run Failed Destination Activities" data-state-id="Run Failed Destination Activities" data-state-type="Fail">
 <g class="new-look-state-node ">
 <rect x="-138" y="-26" width="276" height="52" rx="8" ry="8"/>
@@ -2459,12 +2459,12 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(518.25,650)">
+<g class="node-container" transform="translate(534.75,650)">
 <g>
 <circle class="sc-gFVvzn dNzQPO shape" r="8"/>
 </g>
 </g>
-<g class="node-container" transform="translate(705.5,477.5)">
+<g class="node-container" transform="translate(722,477.5)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Score Check Destination Activities" data-state-id="Score Check Destination Activities" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-143" y="-26" width="286" height="52" rx="8" ry="8"/>
@@ -2492,7 +2492,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(518.25,581)">
+<g class="node-container" transform="translate(534.75,581)">
 <g class="sc-hknOHE hJEsoj node state Succeed" data-testid="graph-DQ Succeeded Destination Activities" data-state-id="DQ Succeeded Destination Activities" data-state-type="Succeed">
 <g class="new-look-state-node ">
 <rect x="-150.5" y="-26" width="301" height="52" rx="8" ry="8"/>
@@ -2520,7 +2520,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(892.75,581)">
+<g class="node-container" transform="translate(909.25,581)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-DQ Failed - Send SNS for Destination Activities" data-state-id="DQ Failed - Send SNS for Destination Activities" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-184" y="-26" width="368" height="52" rx="8" ry="8"/>
@@ -2553,17 +2553,17 @@ g.Placeholder .label {
 </g>
 <g class="edges">
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Start DQ Evaluation Destination Activities:state-Wait DQ Evaluation Destination Activities:normal" d="M526.5,52L526.5,54.916666666666664C526.5,57.833333333333336,526.5,63.666666666666664,526.5,69.5C526.5,75.33333333333333,526.5,81.16666666666667,526.5,84.08333333333333L526.5,87" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Start DQ Evaluation Destination Activities:state-Wait DQ Evaluation Destination Activities:normal" d="M537.5,52L537.5,54.916666666666664C537.5,57.833333333333336,537.5,63.666666666666664,537.5,69.5C537.5,75.33333333333333,537.5,81.16666666666667,537.5,84.08333333333333L537.5,87" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Wait DQ Evaluation Destination Activities:state-Get DQ Evaluation Destination Activities:normal" d="M467.17816091954023,139L460.5234674329502,141.91666666666666C453.86877394636014,144.83333333333334,440.5593869731801,150.66666666666666,433.9046934865901,156.5C427.25,162.33333333333334,427.25,168.16666666666666,427.25,171.08333333333334L427.25,174" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Wait DQ Evaluation Destination Activities:state-Get DQ Evaluation Destination Activities:normal" d="M478.17816091954023,139L471.5234674329502,141.91666666666666C464.86877394636014,144.83333333333334,451.5593869731801,150.66666666666666,444.9046934865901,156.5C438.25,162.33333333333334,438.25,168.16666666666666,438.25,171.08333333333334L438.25,174" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Evaluation Destination Activities:state-Is DQ Done Destination Activities:normal" d="M427.25,226L427.25,228.91666666666666C427.25,231.83333333333334,427.25,237.66666666666666,433.9046934865901,243.5C440.5593869731801,249.33333333333334,453.86877394636014,255.16666666666666,460.5234674329502,258.0833333333333L467.17816091954023,261" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Evaluation Destination Activities:state-Is DQ Done Destination Activities:normal" d="M438.25,226L438.25,228.91666666666666C438.25,231.83333333333334,438.25,237.66666666666666,444.9046934865901,243.5C451.5593869731801,249.33333333333334,464.86877394636014,255.16666666666666,471.5234674329502,258.0833333333333L478.17816091954023,261" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Destination Activities:state-Get DQ Result Destination Activities:choiceRule:0" d="M616.4323671497584,313L631.2769726247988,317.2916666666667C646.121578099839,321.5833333333333,675.8107890499194,330.1666666666667,690.6553945249598,338.75C705.5,347.3333333333333,705.5,355.9166666666667,705.5,360.2083333333333L705.5,364.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Destination Activities-0" class="edge-label" transform="translate(690.6553945249598,338.75)">
+<path id="state-Is DQ Done Destination Activities:state-Get DQ Result Destination Activities:choiceRule:0" d="M630.195652173913,313L645.4963768115941,317.2916666666667C660.7971014492754,321.5833333333333,691.3985507246376,330.1666666666667,706.6992753623189,338.75C722,347.3333333333333,722,355.9166666666667,722,360.2083333333333L722,364.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Destination Activities-0" class="edge-label" transform="translate(706.6992753623189,338.75)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #1</tspan>
@@ -2572,8 +2572,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Destination Activities:state-Run Failed - Send SNS Destination Activities:choiceRule:1" d="M386,307.6852773826458L350.8333333333333,312.86273115220484C315.6666666666667,318.04018492176385,245.33333333333334,328.3950924608819,210.16666666666666,342.197546230441C175,356,175,373.25,175,389.125C175,405,175,419.5,175,429.6666666666667C175,439.8333333333333,175,445.6666666666667,175,448.5833333333333L175,451.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Destination Activities-1" class="edge-label" transform="translate(210.16666666666666,342.197546230441)">
+<path id="state-Is DQ Done Destination Activities:state-Run Failed - Send SNS for Destination Activities:choiceRule:1" d="M397,307.6852773826458L361.8333333333333,312.86273115220484C326.6666666666667,318.04018492176385,256.3333333333333,328.3950924608819,221.16666666666666,342.197546230441C186,356,186,373.25,186,389.125C186,405,186,419.5,186,429.6666666666667C186,439.8333333333333,186,445.6666666666667,186,448.5833333333333L186,451.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Destination Activities-1" class="edge-label" transform="translate(221.16666666666666,342.197546230441)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #2</tspan>
@@ -2582,8 +2582,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Destination Activities:state-Wait DQ Evaluation Destination Activities:choiceDefault" d="M585.8218390804598,261L592.4765325670497,258.0833333333333C599.1312260536398,255.16666666666666,612.44061302682,249.33333333333334,619.0953065134099,239.16666666666666C625.75,229,625.75,214.5,625.75,200C625.75,185.5,625.75,171,619.0953065134099,160.83333333333334C612.44061302682,150.66666666666666,599.1312260536398,144.83333333333334,592.4765325670497,141.91666666666666L585.8218390804598,139" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Destination Activities-Default" class="edge-label" transform="translate(619.0953065134099,239.16666666666666)">
+<path id="state-Is DQ Done Destination Activities:state-Wait DQ Evaluation Destination Activities:choiceDefault" d="M596.8218390804598,261L603.4765325670497,258.0833333333333C610.1312260536398,255.16666666666666,623.44061302682,249.33333333333334,630.0953065134099,239.16666666666666C636.75,229,636.75,214.5,636.75,200C636.75,185.5,636.75,171,630.0953065134099,160.83333333333334C623.44061302682,150.66666666666666,610.1312260536398,144.83333333333334,603.4765325670497,141.91666666666666L596.8218390804598,139" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Destination Activities-Default" class="edge-label" transform="translate(630.0953065134099,239.16666666666666)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -2592,17 +2592,17 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed - Send SNS Destination Activities:state-Run Failed Destination Activities:normal" d="M175,503.5L175,507.7916666666667C175,512.0833333333334,175,520.6666666666666,175,529.25C175,537.8333333333334,175,546.4166666666666,175,550.7083333333334L175,555" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed - Send SNS for Destination Activities:state-Run Failed Destination Activities:normal" d="M186,503.5L186,507.7916666666667C186,512.0833333333334,186,520.6666666666666,186,529.25C186,537.8333333333334,186,546.4166666666666,186,550.7083333333334L186,555" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed Destination Activities:end:normal" d="M175,607L175,609.9166666666666C175,612.8333333333334,175,618.6666666666666,230.8786641639074,625.7345523753717C286.7573283278147,632.8024380840766,398.5146566556295,641.104876168153,454.3933208195369,645.2560952101913L510.2719849834442,649.4073142522296" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed Destination Activities:end:normal" d="M186,607L186,609.9166666666666C186,612.8333333333334,186,618.6666666666666,242.7952166272099,625.7361018609143C299.5904332544198,632.8055370551618,413.18086650883964,641.1110741103238,469.9760831360495,645.2638426379048L526.7712997632594,649.4166111654856" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Result Destination Activities:state-Score Check Destination Activities:normal" d="M705.5,416.5L705.5,419.4166666666667C705.5,422.3333333333333,705.5,428.1666666666667,705.5,434C705.5,439.8333333333333,705.5,445.6666666666667,705.5,448.5833333333333L705.5,451.5" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Result Destination Activities:state-Score Check Destination Activities:normal" d="M722,416.5L722,419.4166666666667C722,422.3333333333333,722,428.1666666666667,722,434C722,439.8333333333333,722,445.6666666666667,722,448.5833333333333L722,451.5" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Score Check Destination Activities:state-DQ Succeeded Destination Activities:choiceRule:0" d="M611.4227053140097,503.5L595.8939210950081,507.7916666666667C580.3651368760064,512.0833333333334,549.3075684380033,520.6666666666666,533.7787842190016,529.25C518.25,537.8333333333334,518.25,546.4166666666666,518.25,550.7083333333334L518.25,555" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Score Check Destination Activities-0" class="edge-label" transform="translate(533.7787842190016,529.25)">
+<path id="state-Score Check Destination Activities:state-DQ Succeeded Destination Activities:choiceRule:0" d="M627.9227053140097,503.5L612.3939210950081,507.7916666666667C596.8651368760064,512.0833333333334,565.8075684380033,520.6666666666666,550.2787842190016,529.25C534.75,537.8333333333334,534.75,546.4166666666666,534.75,550.7083333333334L534.75,555" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Destination Activities-0" class="edge-label" transform="translate(550.2787842190016,529.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Rule #1</tspan>
@@ -2611,8 +2611,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Score Check Destination Activities:state-DQ Failed - Send SNS for Destination Activities:choiceDefault" d="M799.5772946859903,503.5L815.1060789049919,507.7916666666667C830.6348631239935,512.0833333333334,861.6924315619967,520.6666666666666,877.2212157809985,529.25C892.75,537.8333333333334,892.75,546.4166666666666,892.75,550.7083333333334L892.75,555" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Score Check Destination Activities-Default" class="edge-label" transform="translate(877.2212157809985,529.25)">
+<path id="state-Score Check Destination Activities:state-DQ Failed - Send SNS for Destination Activities:choiceDefault" d="M816.0772946859903,503.5L831.6060789049919,507.7916666666667C847.1348631239935,512.0833333333334,878.1924315619967,520.6666666666666,893.7212157809985,529.25C909.25,537.8333333333334,909.25,546.4166666666666,909.25,550.7083333333334L909.25,555" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Destination Activities-Default" class="edge-label" transform="translate(893.7212157809985,529.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -2621,29 +2621,29 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Succeeded Destination Activities:end:normal" d="M518.25,607L518.25,609.9166666666666C518.25,612.8333333333334,518.25,618.6666666666666,518.25,624.5C518.25,630.3333333333334,518.25,636.1666666666666,518.25,639.0833333333334L518.25,642" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Succeeded Destination Activities:end:normal" d="M534.75,607L534.75,609.9166666666666C534.75,612.8333333333334,534.75,618.6666666666666,534.75,624.5C534.75,630.3333333333334,534.75,636.1666666666666,534.75,639.0833333333334L534.75,642" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Failed - Send SNS for Destination Activities:end:normal" d="M892.75,607L892.75,609.9166666666666C892.75,612.8333333333334,892.75,618.6666666666666,831.6635864696228,625.7427553494205C770.5771729392458,632.8188440321742,648.4043458784913,641.1376880643484,587.3179323481141,645.2971100804355L526.231518817737,649.4565320965226" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Failed - Send SNS for Destination Activities:end:normal" d="M909.25,607L909.25,609.9166666666666C909.25,612.8333333333334,909.25,618.6666666666666,848.1635864696228,625.7427553494205C787.0771729392458,632.8188440321742,664.9043458784913,641.1376880643484,603.8179323481141,645.2971100804355L542.731518817737,649.4565320965226" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 </g>
 </g>
-<g class="branchInsertArea" data-insertion-index="4" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:4" x="1076.75" y="0" width="20" height="658">
-<rect x="1076.75" y="0" width="20" height="658" stroke="none" fill="none"/>
-<path d="M1086.75,0 l0,658" stroke="none" fill="none"/>
+<g class="branchInsertArea" data-insertion-index="4" data-parent-state-id="Data Quality Check Parallel" id="Data Quality Check Parallel:4" x="1093.25" y="0" width="20" height="658">
+<rect x="1093.25" y="0" width="20" height="658" stroke="none" fill="none"/>
+<path d="M1103.25,0 l0,658" stroke="none" fill="none"/>
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw">
-<path id="Data Quality Check Parallel-Start DQ Evaluation Exchange Rates" class="path starting-connection" d="M2002.625,47L2002.625,50.75C2002.625,54.5,2002.625,62,1751.1875,65.75C1499.75,69.5,996.875,69.5,745.4375,73.25C494,77,494,84.5,494,88.25L494,92" fill="none"/>
+<path id="Data Quality Check Parallel-Start DQ Evaluation Exchange Rates" class="path starting-connection" d="M2036,47L2036,50.75C2036,54.5,2036,62,1780.8333333333333,65.75C1525.6666666666667,69.5,1015.3333333333334,69.5,760.1666666666666,73.25C505,77,505,84.5,505,88.25L505,92" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw">
-<path id="Data Quality Check Parallel-Start DQ Evaluation Airplane Rates" class="path starting-connection" d="M2002.625,47L2002.625,50.75C2002.625,54.5,2002.625,62,1914.9791666666667,65.75C1827.3333333333333,69.5,1652.0416666666667,69.5,1564.3958333333333,73.25C1476.75,77,1476.75,84.5,1476.75,88.25L1476.75,92" fill="none"/>
+<path id="Data Quality Check Parallel-Start DQ Evaluation Airplane Rates" class="path starting-connection" d="M2036,47L2036,50.75C2036,54.5,2036,62,1947.375,65.75C1858.75,69.5,1681.5,69.5,1592.875,73.25C1504.25,77,1504.25,84.5,1504.25,88.25L1504.25,92" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw">
-<path id="Data Quality Check Parallel-Start DQ Evaluation Hotel Rates" class="path starting-connection" d="M2002.625,47L2002.625,50.75C2002.625,54.5,2002.625,62,2073.1458333333335,65.75C2143.6666666666665,69.5,2284.7083333333335,69.5,2355.2291666666665,73.25C2425.75,77,2425.75,84.5,2425.75,88.25L2425.75,92" fill="none"/>
+<path id="Data Quality Check Parallel-Start DQ Evaluation Hotel Rates" class="path starting-connection" d="M2036,47L2036,50.75C2036,54.5,2036,62,2108.375,65.75C2180.75,69.5,2325.5,69.5,2397.875,73.25C2470.25,77,2470.25,84.5,2470.25,88.25L2470.25,92" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw">
-<path id="Data Quality Check Parallel-Start DQ Evaluation Destination Activities" class="path starting-connection" d="M2002.625,47L2002.625,50.75C2002.625,54.5,2002.625,62,2241.3541666666665,65.75C2480.0833333333335,69.5,2957.5416666666665,69.5,3196.2708333333335,73.25C3435,77,3435,84.5,3435,88.25L3435,92" fill="none"/>
+<path id="Data Quality Check Parallel-Start DQ Evaluation Destination Activities" class="path starting-connection" d="M2036,47L2036,50.75C2036,54.5,2036,62,2279.375,65.75C2522.75,69.5,3009.5,69.5,3252.875,73.25C3496.25,77,3496.25,84.5,3496.25,88.25L3496.25,92" fill="none"/>
 </g>
 </g>
 </g>
@@ -2674,7 +2674,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,1860)">
+<g class="node-container" transform="translate(2036,1860)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Combine Datasets Transformation" data-state-id="Combine Datasets Transformation" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-144" y="-26" width="288" height="52" rx="8" ry="8"/>
@@ -2704,7 +2704,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,1947)">
+<g class="node-container" transform="translate(2036,1947)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Combined Datasets Start Crawler" data-state-id="Combined Datasets Start Crawler" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-141.5" y="-26" width="283" height="52" rx="8" ry="8"/>
@@ -2734,7 +2734,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,2034)">
+<g class="node-container" transform="translate(2036,2034)">
 <g class="sc-hknOHE hJEsoj node state Wait" data-testid="graph-Wait Combined Datasets Crawler" data-state-id="Wait Combined Datasets Crawler" data-state-type="Wait">
 <g class="new-look-state-node ">
 <rect x="-140" y="-26" width="280" height="52" rx="8" ry="8"/>
@@ -2762,7 +2762,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(1916.875,2121)">
+<g class="node-container" transform="translate(1950.25,2121)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Combined Datasets Get Crawler" data-state-id="Combined Datasets Get Crawler" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-136.5" y="-26" width="273" height="52" rx="8" ry="8"/>
@@ -2792,7 +2792,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,2208)">
+<g class="node-container" transform="translate(2036,2208)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Is Combined Datasets Crawler Done" data-state-id="Is Combined Datasets Crawler Done" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-149" y="-26" width="298" height="52" rx="8" ry="8"/>
@@ -2820,7 +2820,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,2311.5)">
+<g class="node-container" transform="translate(2036,2311.5)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Start DQ Combined Datasets" data-state-id="Start DQ Combined Datasets" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-157.5" y="-26" width="315" height="52" rx="8" ry="8"/>
@@ -2850,7 +2850,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,2398.5)">
+<g class="node-container" transform="translate(2036,2398.5)">
 <g class="sc-hknOHE hJEsoj node state Wait" data-testid="graph-Wait DQ Combined Datasets" data-state-id="Wait DQ Combined Datasets" data-state-type="Wait">
 <g class="new-look-state-node ">
 <rect x="-126" y="-26" width="252" height="52" rx="8" ry="8"/>
@@ -2878,7 +2878,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(1906.125,2485.5)">
+<g class="node-container" transform="translate(1939.5,2485.5)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Evaluation Combined Datasets" data-state-id="Get DQ Evaluation Combined Datasets" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-158" y="-26" width="316" height="52" rx="8" ry="8"/>
@@ -2908,7 +2908,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2002.625,2572.5)">
+<g class="node-container" transform="translate(2036,2572.5)">
 <g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Is DQ Done Combined Datasets" data-state-id="Is DQ Done Combined Datasets" data-state-type="Choice">
 <g class="new-look-state-node ">
 <rect x="-135" y="-26" width="270" height="52" rx="8" ry="8"/>
@@ -2936,7 +2936,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2196.625,2676)">
+<g class="node-container" transform="translate(2235.75,2676)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Get DQ Result Combined Datasets" data-state-id="Get DQ Result Combined Datasets" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-144.5" y="-26" width="289" height="52" rx="8" ry="8"/>
@@ -2966,11 +2966,11 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(1626.875,2883)">
-<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS Combined Datasets" data-state-id="Run Failed - Send SNS Combined Datasets" data-state-type="Task">
+<g class="node-container" transform="translate(1654.5,2883)">
+<g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Run Failed - Send SNS for Combined Datasets" data-state-id="Run Failed - Send SNS for Combined Datasets" data-state-type="Task">
 <g class="new-look-state-node ">
-<rect x="-169.5" y="-26" width="339" height="52" rx="8" ry="8"/>
-<g class="handle" transform="translate(-169.5,-26)" aria-hidden="true">
+<rect x="-181" y="-26" width="362" height="52" rx="8" ry="8"/>
+<g class="handle" transform="translate(-181,-26)" aria-hidden="true">
 <circle cx="7" cy="20" r="1.5"/>
 <circle cx="12" cy="20" r="1.5"/>
 <circle cx="7" cy="26" r="1.5"/>
@@ -2978,25 +2978,25 @@ g.Placeholder .label {
 <circle cx="7" cy="32" r="1.5"/>
 <circle cx="12" cy="32" r="1.5"/>
 </g>
-<svg class="icon" x="-151.5" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
+<svg class="icon" x="-163" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
 <title>SNS: Publish</title>
 <rect fill="var(--color-background-container-header-zp2eoi, #ffffff)" x="0" y="0" width="48" height="48"/>
 <use href="#icon-service-sns" aria-hidden="true">
 <title>Simple Notification Service</title>
 </use>
 </svg>
-<g class="text-lines" transform="translate(-107.5,-26)">
+<g class="text-lines" transform="translate(-119,-26)">
 <text transform="translate(0,18)" class="line1">
 <tspan xml:space="preserve" text-anchor="start">SNS: Publish</tspan>
 </text>
 <text transform="translate(0,36.5)" class="line2 label">
-<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS Combined Datasets</tspan>
+<tspan xml:space="preserve" text-anchor="start">Run Failed - Send SNS for Combined Datasets</tspan>
 </text>
 </g>
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(1626.875,2970)">
+<g class="node-container" transform="translate(1654.5,2970)">
 <g class="sc-hknOHE hJEsoj node state Fail" data-testid="graph-Run Failed Combined Datasets" data-state-id="Run Failed Combined Datasets" data-state-type="Fail">
 <g class="new-look-state-node ">
 <rect x="-132.5" y="-26" width="265" height="52" rx="8" ry="8"/>
@@ -3024,7 +3024,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2014.875,3053)">
+<g class="node-container" transform="translate(2054,3053)">
 <g>
 <circle class="sc-iMWBiJ jOLdYJ shape" r="22"/>
 <text class="sc-brPLxw dfGTsw label">
@@ -3032,11 +3032,11 @@ g.Placeholder .label {
 </text>
 </g>
 </g>
-<g class="node-container" transform="translate(2196.625,2779.5)">
-<g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Combined Datasets DQ Pass/Fail" data-state-id="Combined Datasets DQ Pass/Fail" data-state-type="Choice">
+<g class="node-container" transform="translate(2235.75,2779.5)">
+<g class="sc-hknOHE hJEsoj node state Choice" data-testid="graph-Score Check Combined Datasets" data-state-id="Score Check Combined Datasets" data-state-type="Choice">
 <g class="new-look-state-node ">
-<rect x="-139.5" y="-26" width="279" height="52" rx="8" ry="8"/>
-<g class="handle" transform="translate(-139.5,-26)" aria-hidden="true">
+<rect x="-137.5" y="-26" width="275" height="52" rx="8" ry="8"/>
+<g class="handle" transform="translate(-137.5,-26)" aria-hidden="true">
 <circle cx="7" cy="20" r="1.5"/>
 <circle cx="12" cy="20" r="1.5"/>
 <circle cx="7" cy="26" r="1.5"/>
@@ -3044,23 +3044,23 @@ g.Placeholder .label {
 <circle cx="7" cy="32" r="1.5"/>
 <circle cx="12" cy="32" r="1.5"/>
 </g>
-<svg class="icon" x="-121.5" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
+<svg class="icon" x="-119.5" y="-18" width="36" height="36" viewBox="0 0 48 48" overflow="hidden" style="clip-path:inset(0 round 6px)">
 <title>Choice state</title>
 <rect fill="var(--color-background-container-header-zp2eoi, #ffffff)" x="0" y="0" width="48" height="48"/>
 <use href="#icon-flow-choice"/>
 </svg>
-<g class="text-lines" transform="translate(-77.5,-26)">
+<g class="text-lines" transform="translate(-75.5,-26)">
 <text transform="translate(0,18)" class="line1">
 <tspan xml:space="preserve" text-anchor="start">Choice state</tspan>
 </text>
 <text transform="translate(0,36.5)" class="line2 label">
-<tspan xml:space="preserve" text-anchor="start">Combined Datasets DQ Pass/Fail</tspan>
+<tspan xml:space="preserve" text-anchor="start">Score Check Combined Datasets</tspan>
 </text>
 </g>
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2378.375,2883)">
+<g class="node-container" transform="translate(2417.5,2883)">
 <g class="sc-hknOHE hJEsoj node state Pass" data-testid="graph-DQ Succeeded Combined Datasets" data-state-id="DQ Succeeded Combined Datasets" data-state-type="Pass">
 <g class="new-look-state-node ">
 <rect x="-145" y="-26" width="290" height="52" rx="8" ry="8"/>
@@ -3088,7 +3088,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2014.875,2883)">
+<g class="node-container" transform="translate(2054,2883)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-DQ Failed - Send SNS for Combined Datasets" data-state-id="DQ Failed - Send SNS for Combined Datasets" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-178.5" y="-26" width="357" height="52" rx="8" ry="8"/>
@@ -3118,7 +3118,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2014.875,2970)">
+<g class="node-container" transform="translate(2054,2970)">
 <g class="sc-hknOHE hJEsoj node state Fail" data-testid="graph-DQ Failed Combined Datasets" data-state-id="DQ Failed Combined Datasets" data-state-type="Fail">
 <g class="new-look-state-node ">
 <rect x="-130.5" y="-26" width="261" height="52" rx="8" ry="8"/>
@@ -3146,7 +3146,7 @@ g.Placeholder .label {
 </g>
 </g>
 </g>
-<g class="node-container" transform="translate(2378.375,2970)">
+<g class="node-container" transform="translate(2417.5,2970)">
 <g class="sc-hknOHE hJEsoj node state Task" data-testid="graph-Load Data Gold Layer" data-state-id="Load Data Gold Layer" data-state-type="Task">
 <g class="new-look-state-node ">
 <rect x="-120" y="-26" width="240" height="52" rx="8" ry="8"/>
@@ -3179,32 +3179,32 @@ g.Placeholder .label {
 </g>
 <g class="edges">
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Extract Parallel:state-Transformation Parallel:normal" d="M2002.625,473L2002.625,475.9166666666667C2002.625,478.8333333333333,2002.625,484.6666666666667,2002.625,490.5C2002.625,496.3333333333333,2002.625,502.1666666666667,2002.625,505.0833333333333L2002.625,508" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Extract Parallel:state-Transformation Parallel:normal" d="M2036,473L2036,475.9166666666667C2036,478.8333333333333,2036,484.6666666666667,2036,490.5C2036,496.3333333333333,2036,502.1666666666667,2036,505.0833333333333L2036,508" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="start:state-Extract Parallel" d="M2002.625,44L2002.625,46.916666666666664C2002.625,49.833333333333336,2002.625,55.666666666666664,2002.625,61.5C2002.625,67.33333333333333,2002.625,73.16666666666667,2002.625,76.08333333333333L2002.625,79" marker-end="url(#arrowhead)" fill="none"/>
+<path id="start:state-Extract Parallel" d="M2036,44L2036,46.916666666666664C2036,49.833333333333336,2036,55.666666666666664,2036,61.5C2036,67.33333333333333,2036,73.16666666666667,2036,76.08333333333333L2036,79" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Transformation Parallel:state-Data Quality Check Parallel:normal" d="M2002.625,989L2002.625,991.9166666666666C2002.625,994.8333333333334,2002.625,1000.6666666666666,2002.625,1006.5C2002.625,1012.3333333333334,2002.625,1018.1666666666666,2002.625,1021.0833333333334L2002.625,1024" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Transformation Parallel:state-Data Quality Check Parallel:normal" d="M2036,989L2036,991.9166666666666C2036,994.8333333333334,2036,1000.6666666666666,2036,1006.5C2036,1012.3333333333334,2036,1018.1666666666666,2036,1021.0833333333334L2036,1024" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Data Quality Check Parallel:state-Combine Datasets Transformation:normal" d="M2002.625,1799L2002.625,1801.9166666666667C2002.625,1804.8333333333333,2002.625,1810.6666666666667,2002.625,1816.5C2002.625,1822.3333333333333,2002.625,1828.1666666666667,2002.625,1831.0833333333333L2002.625,1834" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Data Quality Check Parallel:state-Combine Datasets Transformation:normal" d="M2036,1799L2036,1801.9166666666667C2036,1804.8333333333333,2036,1810.6666666666667,2036,1816.5C2036,1822.3333333333333,2036,1828.1666666666667,2036,1831.0833333333333L2036,1834" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Combine Datasets Transformation:state-Combined Datasets Start Crawler:normal" d="M2002.625,1886L2002.625,1888.9166666666667C2002.625,1891.8333333333333,2002.625,1897.6666666666667,2002.625,1903.5C2002.625,1909.3333333333333,2002.625,1915.1666666666667,2002.625,1918.0833333333333L2002.625,1921" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Combine Datasets Transformation:state-Combined Datasets Start Crawler:normal" d="M2036,1886L2036,1888.9166666666667C2036,1891.8333333333333,2036,1897.6666666666667,2036,1903.5C2036,1909.3333333333333,2036,1915.1666666666667,2036,1918.0833333333333L2036,1921" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Combined Datasets Start Crawler:state-Wait Combined Datasets Crawler:normal" d="M2002.625,1973L2002.625,1975.9166666666667C2002.625,1978.8333333333333,2002.625,1984.6666666666667,2002.625,1990.5C2002.625,1996.3333333333333,2002.625,2002.1666666666667,2002.625,2005.0833333333333L2002.625,2008" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Combined Datasets Start Crawler:state-Wait Combined Datasets Crawler:normal" d="M2036,1973L2036,1975.9166666666667C2036,1978.8333333333333,2036,1984.6666666666667,2036,1990.5C2036,1996.3333333333333,2036,2002.1666666666667,2036,2005.0833333333333L2036,2008" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Wait Combined Datasets Crawler:state-Combined Datasets Get Crawler:normal" d="M1951.3721264367816,2060L1945.6226053639848,2062.9166666666665C1939.8730842911875,2065.8333333333335,1928.3740421455939,2071.6666666666665,1922.6245210727968,2077.5C1916.875,2083.3333333333335,1916.875,2089.1666666666665,1916.875,2092.0833333333335L1916.875,2095" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Wait Combined Datasets Crawler:state-Combined Datasets Get Crawler:normal" d="M1984.7471264367816,2060L1978.9976053639848,2062.9166666666665C1973.2480842911875,2065.8333333333335,1961.7490421455939,2071.6666666666665,1955.9995210727968,2077.5C1950.25,2083.3333333333335,1950.25,2089.1666666666665,1950.25,2092.0833333333335L1950.25,2095" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Combined Datasets Get Crawler:state-Is Combined Datasets Crawler Done:normal" d="M1916.875,2147L1916.875,2149.9166666666665C1916.875,2152.8333333333335,1916.875,2158.6666666666665,1922.6245210727968,2164.5C1928.3740421455939,2170.3333333333335,1939.8730842911875,2176.1666666666665,1945.6226053639846,2179.0833333333335L1951.3721264367816,2182" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Combined Datasets Get Crawler:state-Is Combined Datasets Crawler Done:normal" d="M1950.25,2147L1950.25,2149.9166666666665C1950.25,2152.8333333333335,1950.25,2158.6666666666665,1955.9995210727968,2164.5C1961.7490421455939,2170.3333333333335,1973.2480842911875,2176.1666666666665,1978.9976053639846,2179.0833333333335L1984.7471264367816,2182" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is Combined Datasets Crawler Done:state-Start DQ Combined Datasets:choiceRule:0" d="M2002.625,2234L2002.625,2238.2916666666665C2002.625,2242.5833333333335,2002.625,2251.1666666666665,2002.625,2259.75C2002.625,2268.3333333333335,2002.625,2276.9166666666665,2002.625,2281.2083333333335L2002.625,2285.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is Combined Datasets Crawler Done-0" class="edge-label" transform="translate(2002.625,2259.75)">
+<path id="state-Is Combined Datasets Crawler Done:state-Start DQ Combined Datasets:choiceRule:0" d="M2036,2234L2036,2238.2916666666665C2036,2242.5833333333335,2036,2251.1666666666665,2036,2259.75C2036,2268.3333333333335,2036,2276.9166666666665,2036,2281.2083333333335L2036,2285.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is Combined Datasets Crawler Done-0" class="edge-label" transform="translate(2036,2259.75)">
 <rect x="-106" y="-8.25" width="212" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">{% $states.input.crawlerState = 'READY' %…</tspan>
@@ -3213,8 +3213,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is Combined Datasets Crawler Done:state-Wait Combined Datasets Crawler:choiceDefault" d="M2053.8778735632186,2182L2059.6273946360157,2179.0833333333335C2065.3769157088122,2176.1666666666665,2076.8759578544064,2170.3333333333335,2082.625478927203,2160.1666666666665C2088.375,2150,2088.375,2135.5,2088.375,2121C2088.375,2106.5,2088.375,2092,2082.625478927203,2081.8333333333335C2076.8759578544064,2071.6666666666665,2065.3769157088122,2065.8333333333335,2059.6273946360157,2062.9166666666665L2053.8778735632186,2060" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is Combined Datasets Crawler Done-Default" class="edge-label" transform="translate(2082.625478927203,2160.1666666666665)">
+<path id="state-Is Combined Datasets Crawler Done:state-Wait Combined Datasets Crawler:choiceDefault" d="M2087.2528735632186,2182L2093.0023946360157,2179.0833333333335C2098.7519157088122,2176.1666666666665,2110.2509578544064,2170.3333333333335,2116.000478927203,2160.1666666666665C2121.75,2150,2121.75,2135.5,2121.75,2121C2121.75,2106.5,2121.75,2092,2116.000478927203,2081.8333333333335C2110.2509578544064,2071.6666666666665,2098.7519157088122,2065.8333333333335,2093.0023946360157,2062.9166666666665L2087.2528735632186,2060" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is Combined Datasets Crawler Done-Default" class="edge-label" transform="translate(2116.000478927203,2160.1666666666665)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -3223,17 +3223,17 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Start DQ Combined Datasets:state-Wait DQ Combined Datasets:normal" d="M2002.625,2337.5L2002.625,2340.4166666666665C2002.625,2343.3333333333335,2002.625,2349.1666666666665,2002.625,2355C2002.625,2360.8333333333335,2002.625,2366.6666666666665,2002.625,2369.5833333333335L2002.625,2372.5" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Start DQ Combined Datasets:state-Wait DQ Combined Datasets:normal" d="M2036,2337.5L2036,2340.4166666666665C2036,2343.3333333333335,2036,2349.1666666666665,2036,2355C2036,2360.8333333333335,2036,2366.6666666666665,2036,2369.5833333333335L2036,2372.5" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Wait DQ Combined Datasets:state-Get DQ Evaluation Combined Datasets:normal" d="M1944.9468390804598,2424.5L1938.4765325670498,2427.4166666666665C1932.0062260536397,2430.3333333333335,1919.0656130268198,2436.1666666666665,1912.59530651341,2442C1906.125,2447.8333333333335,1906.125,2453.6666666666665,1906.125,2456.5833333333335L1906.125,2459.5" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Wait DQ Combined Datasets:state-Get DQ Evaluation Combined Datasets:normal" d="M1978.3218390804598,2424.5L1971.8515325670498,2427.4166666666665C1965.3812260536397,2430.3333333333335,1952.4406130268198,2436.1666666666665,1945.97030651341,2442C1939.5,2447.8333333333335,1939.5,2453.6666666666665,1939.5,2456.5833333333335L1939.5,2459.5" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Evaluation Combined Datasets:state-Is DQ Done Combined Datasets:normal" d="M1906.125,2511.5L1906.125,2514.4166666666665C1906.125,2517.3333333333335,1906.125,2523.1666666666665,1912.59530651341,2529C1919.0656130268198,2534.8333333333335,1932.0062260536397,2540.6666666666665,1938.4765325670496,2543.5833333333335L1944.9468390804598,2546.5" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Evaluation Combined Datasets:state-Is DQ Done Combined Datasets:normal" d="M1939.5,2511.5L1939.5,2514.4166666666665C1939.5,2517.3333333333335,1939.5,2523.1666666666665,1945.97030651341,2529C1952.4406130268198,2534.8333333333335,1965.3812260536397,2540.6666666666665,1971.8515325670496,2543.5833333333335L1978.3218390804598,2546.5" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Combined Datasets:state-Get DQ Result Combined Datasets:choiceRule:0" d="M2100.0935990338166,2598.5L2116.182165861514,2602.7916666666665C2132.270732689211,2607.0833333333335,2164.4478663446057,2615.6666666666665,2180.5364331723026,2624.25C2196.625,2632.8333333333335,2196.625,2641.4166666666665,2196.625,2645.7083333333335L2196.625,2650" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Combined Datasets-0" class="edge-label" transform="translate(2180.5364331723026,2624.25)">
+<path id="state-Is DQ Done Combined Datasets:state-Get DQ Result Combined Datasets:choiceRule:0" d="M2136.3574879227053,2598.5L2152.9229066022544,2602.7916666666665C2169.4883252818036,2607.0833333333335,2202.619162640902,2615.6666666666665,2219.184581320451,2624.25C2235.75,2632.8333333333335,2235.75,2641.4166666666665,2235.75,2645.7083333333335L2235.75,2650" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Combined Datasets-0" class="edge-label" transform="translate(2219.184581320451,2624.25)">
 <rect x="-82.5" y="-8.25" width="165" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">{% $run.Status = 'SUCCEEDED' %}</tspan>
@@ -3242,8 +3242,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Combined Datasets:state-Run Failed - Send SNS Combined Datasets:choiceRule:1" d="M1867.625,2591.0928143712576L1827.5,2596.619011976048C1787.375,2602.1452095808386,1707.125,2613.197604790419,1667,2627.3488023952095C1626.875,2641.5,1626.875,2658.75,1626.875,2676C1626.875,2693.25,1626.875,2710.5,1626.875,2727.75C1626.875,2745,1626.875,2762.25,1626.875,2779.5C1626.875,2796.75,1626.875,2814,1626.875,2826.9166666666665C1626.875,2839.8333333333335,1626.875,2848.4166666666665,1626.875,2852.7083333333335L1626.875,2857" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Combined Datasets-1" class="edge-label" transform="translate(1667,2627.3488023952095)">
+<path id="state-Is DQ Done Combined Datasets:state-Run Failed - Send SNS for Combined Datasets:choiceRule:1" d="M1901,2590.8125819134993L1859.9166666666667,2596.385484927916C1818.8333333333333,2601.958387942333,1736.6666666666667,2613.1041939711663,1695.5833333333333,2627.302096985583C1654.5,2641.5,1654.5,2658.75,1654.5,2676C1654.5,2693.25,1654.5,2710.5,1654.5,2727.75C1654.5,2745,1654.5,2762.25,1654.5,2779.5C1654.5,2796.75,1654.5,2814,1654.5,2826.9166666666665C1654.5,2839.8333333333335,1654.5,2848.4166666666665,1654.5,2852.7083333333335L1654.5,2857" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Combined Datasets-1" class="edge-label" transform="translate(1695.5833333333333,2627.302096985583)">
 <rect x="-103" y="-8.25" width="206" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">{% $run.Status in ['FAILED', 'TIMEOUT', 'S…</tspan>
@@ -3252,8 +3252,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Is DQ Done Combined Datasets:state-Wait DQ Combined Datasets:choiceDefault" d="M2060.3031609195405,2546.5L2066.7734674329504,2543.5833333333335C2073.2437739463603,2540.6666666666665,2086.18438697318,2534.8333333333335,2092.65469348659,2524.6666666666665C2099.125,2514.5,2099.125,2500,2099.125,2485.5C2099.125,2471,2099.125,2456.5,2092.65469348659,2446.3333333333335C2086.18438697318,2436.1666666666665,2073.2437739463603,2430.3333333333335,2066.7734674329504,2427.4166666666665L2060.3031609195405,2424.5" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Is DQ Done Combined Datasets-Default" class="edge-label" transform="translate(2092.65469348659,2524.6666666666665)">
+<path id="state-Is DQ Done Combined Datasets:state-Wait DQ Combined Datasets:choiceDefault" d="M2093.6781609195405,2546.5L2100.1484674329504,2543.5833333333335C2106.6187739463603,2540.6666666666665,2119.55938697318,2534.8333333333335,2126.02969348659,2524.6666666666665C2132.5,2514.5,2132.5,2500,2132.5,2485.5C2132.5,2471,2132.5,2456.5,2126.02969348659,2446.3333333333335C2119.55938697318,2436.1666666666665,2106.6187739463603,2430.3333333333335,2100.1484674329504,2427.4166666666665L2093.6781609195405,2424.5" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Is DQ Done Combined Datasets-Default" class="edge-label" transform="translate(2126.02969348659,2524.6666666666665)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -3262,17 +3262,17 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed - Send SNS Combined Datasets:state-Run Failed Combined Datasets:normal" d="M1626.875,2909L1626.875,2911.9166666666665C1626.875,2914.8333333333335,1626.875,2920.6666666666665,1626.875,2926.5C1626.875,2932.3333333333335,1626.875,2938.1666666666665,1626.875,2941.0833333333335L1626.875,2944" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed - Send SNS for Combined Datasets:state-Run Failed Combined Datasets:normal" d="M1654.5,2909L1654.5,2911.9166666666665C1654.5,2914.8333333333335,1654.5,2920.6666666666665,1654.5,2926.5C1654.5,2932.3333333333335,1654.5,2938.1666666666665,1654.5,2941.0833333333335L1654.5,2944" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Run Failed Combined Datasets:end:normal" d="M1626.875,2996L1626.875,2998.9166666666665C1626.875,3001.8333333333335,1626.875,3007.6666666666665,1687.8938543822942,3016.795304333593C1748.9127087645884,3025.9239420005183,1870.950417529177,3038.347884001037,1931.9692719114712,3044.5598550012965L1992.9881262937656,3050.771826001556" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Run Failed Combined Datasets:end:normal" d="M1654.5,2996L1654.5,2998.9166666666665C1654.5,3001.8333333333335,1654.5,3007.6666666666665,1717.4344589626696,3016.8058893509187C1780.3689179253395,3025.9451120351714,1906.2378358506787,3038.390224070343,1969.1722948133483,3044.612780087928L2032.106753776018,3050.8353361055138" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Get DQ Result Combined Datasets:state-Combined Datasets DQ Pass/Fail:normal" d="M2196.625,2702L2196.625,2706.2916666666665C2196.625,2710.5833333333335,2196.625,2719.1666666666665,2196.625,2727.75C2196.625,2736.3333333333335,2196.625,2744.9166666666665,2196.625,2749.2083333333335L2196.625,2753.5" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Get DQ Result Combined Datasets:state-Score Check Combined Datasets:normal" d="M2235.75,2702L2235.75,2706.2916666666665C2235.75,2710.5833333333335,2235.75,2719.1666666666665,2235.75,2727.75C2235.75,2736.3333333333335,2235.75,2744.9166666666665,2235.75,2749.2083333333335L2235.75,2753.5" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Combined Datasets DQ Pass/Fail:state-DQ Succeeded Combined Datasets:choiceRule:0" d="M2287.939009661836,2805.5L2303.0116747181964,2809.7916666666665C2318.084339774557,2814.0833333333335,2348.2296698872783,2822.6666666666665,2363.3023349436394,2831.25C2378.375,2839.8333333333335,2378.375,2848.4166666666665,2378.375,2852.7083333333335L2378.375,2857" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Combined Datasets DQ Pass/Fail-0" class="edge-label" transform="translate(2363.3023349436394,2831.25)">
+<path id="state-Score Check Combined Datasets:state-DQ Succeeded Combined Datasets:choiceRule:0" d="M2327.064009661836,2805.5L2342.1366747181964,2809.7916666666665C2357.209339774557,2814.0833333333335,2387.3546698872783,2822.6666666666665,2402.4273349436394,2831.25C2417.5,2839.8333333333335,2417.5,2848.4166666666665,2417.5,2852.7083333333335L2417.5,2857" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Combined Datasets-0" class="edge-label" transform="translate(2402.4273349436394,2831.25)">
 <rect x="-47" y="-8.25" width="94" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">{% $score &gt;= 1 %}</tspan>
@@ -3281,8 +3281,8 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Combined Datasets DQ Pass/Fail:state-DQ Failed - Send SNS for Combined Datasets:choiceDefault" d="M2105.310990338164,2805.5L2090.2383252818036,2809.7916666666665C2075.165660225443,2814.0833333333335,2045.0203301127215,2822.6666666666665,2029.9476650563608,2831.25C2014.875,2839.8333333333335,2014.875,2848.4166666666665,2014.875,2852.7083333333335L2014.875,2857" marker-end="url(#arrowhead)" fill="none"/>
-<g data-testid="graph-Combined Datasets DQ Pass/Fail-Default" class="edge-label" transform="translate(2029.9476650563608,2831.25)">
+<path id="state-Score Check Combined Datasets:state-DQ Failed - Send SNS for Combined Datasets:choiceDefault" d="M2144.435990338164,2805.5L2129.3633252818036,2809.7916666666665C2114.290660225443,2814.0833333333335,2084.1453301127217,2822.6666666666665,2069.0726650563606,2831.25C2054,2839.8333333333335,2054,2848.4166666666665,2054,2852.7083333333335L2054,2857" marker-end="url(#arrowhead)" fill="none"/>
+<g data-testid="graph-Score Check Combined Datasets-Default" class="edge-label" transform="translate(2069.0726650563606,2831.25)">
 <rect x="-22" y="-8.25" width="44" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
 <tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">Default</tspan>
@@ -3291,16 +3291,16 @@ g.Placeholder .label {
 </g>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Failed - Send SNS for Combined Datasets:state-DQ Failed Combined Datasets:normal" d="M2014.875,2909L2014.875,2911.9166666666665C2014.875,2914.8333333333335,2014.875,2920.6666666666665,2014.875,2926.5C2014.875,2932.3333333333335,2014.875,2938.1666666666665,2014.875,2941.0833333333335L2014.875,2944" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Failed - Send SNS for Combined Datasets:state-DQ Failed Combined Datasets:normal" d="M2054,2909L2054,2911.9166666666665C2054,2914.8333333333335,2054,2920.6666666666665,2054,2926.5C2054,2932.3333333333335,2054,2938.1666666666665,2054,2941.0833333333335L2054,2944" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Succeeded Combined Datasets:state-Load Data Gold Layer:normal" d="M2378.375,2909L2378.375,2911.9166666666665C2378.375,2914.8333333333335,2378.375,2920.6666666666665,2378.375,2926.5C2378.375,2932.3333333333335,2378.375,2938.1666666666665,2378.375,2941.0833333333335L2378.375,2944" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Succeeded Combined Datasets:state-Load Data Gold Layer:normal" d="M2417.5,2909L2417.5,2911.9166666666665C2417.5,2914.8333333333335,2417.5,2920.6666666666665,2417.5,2926.5C2417.5,2932.3333333333335,2417.5,2938.1666666666665,2417.5,2941.0833333333335L2417.5,2944" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-DQ Failed Combined Datasets:end:normal" d="M2014.875,2996L2014.875,2998.9166666666665C2014.875,3001.8333333333335,2014.875,3007.6666666666665,2014.875,3013.5C2014.875,3019.3333333333335,2014.875,3025.1666666666665,2014.875,3028.0833333333335L2014.875,3031" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-DQ Failed Combined Datasets:end:normal" d="M2054,2996L2054,2998.9166666666665C2054,3001.8333333333335,2054,3007.6666666666665,2054,3013.5C2054,3019.3333333333335,2054,3025.1666666666665,2054,3028.0833333333335L2054,3031" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 <g class="sc-uVWWZ hHyaPw edge">
-<path id="state-Load Data Gold Layer:end:normal" d="M2378.375,2996L2378.375,2998.9166666666665C2378.375,3001.8333333333335,2378.375,3007.6666666666665,2321.436874739241,3016.770557398808C2264.498749478482,3025.874448130949,2150.6224989569637,3038.2488962618977,2093.6843736962046,3044.436120327373L2036.7462484354458,3050.6233443928472" marker-end="url(#arrowhead)" fill="none"/>
+<path id="state-Load Data Gold Layer:end:normal" d="M2417.5,2996L2417.5,2998.9166666666665C2417.5,3001.8333333333335,2417.5,3007.6666666666665,2360.561874739241,3016.770557398808C2303.623749478482,3025.874448130949,2189.747498956964,3038.2488962618977,2132.809373696205,3044.436120327373L2075.871248435446,3050.6233443928472" marker-end="url(#arrowhead)" fill="none"/>
 </g>
 </g>
 <defs>
