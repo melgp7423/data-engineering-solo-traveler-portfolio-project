@@ -3273,10 +3273,10 @@ g.Placeholder .label {
 <g class="sc-uVWWZ hHyaPw edge">
 <path id="state-Combined DQ Pass/Fail:state-DQ Succeeded Combined Data:choiceRule:0" d="M2247.278381642512,2805.5L2261.127818035427,2809.7916666666665C2274.9772544283414,2814.0833333333335,2302.6761272141707,2822.6666666666665,2316.5255636070856,2831.25C2330.375,2839.8333333333335,2330.375,2848.4166666666665,2330.375,2852.7083333333335L2330.375,2857" marker-end="url(#arrowhead)" fill="none"/>
 <g data-testid="graph-Combined DQ Pass/Fail-0" class="edge-label" transform="translate(2316.5255636070856,2831.25)">
-<rect x="-51" y="-8.25" width="102" height="16.5" class="sc-hCPjZK oHYCM"/>
+<rect x="-47" y="-8.25" width="94" height="16.5" class="sc-hCPjZK oHYCM"/>
 <text class="sc-Nxspf fhzTIS label">
-<tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">{% $score &gt;= 0.9 %}</tspan>
-<title>{% $score &gt;= 0.9 %}</title>
+<tspan xml:space="preserve" text-anchor="middle" alignment-baseline="central">{% $score &gt;= 1 %}</tspan>
+<title>{% $score &gt;= 1 %}</title>
 </text>
 </g>
 </g>
