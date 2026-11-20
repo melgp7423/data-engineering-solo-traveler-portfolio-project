@@ -114,11 +114,9 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
    - Airplane ticket rates, hotel room rates and destination activities run in a chain. The hotels Lambda searches the destinations from the airplane ticket rates data and the destination activities Lambda searches the destinations from the hotel room rates data.
 5. **Transform → Silver** One transform Lambda per source reads its bronze JSON, keeps only the fields the pipeline needs, cleans all the data and writes the result as Parquet to that source's silver bucket.
 6. **Catalog** Once extraction finishes, a Glue Crawler crawls the bronze S3 buckets, infers each source's schema and registers it as a table (with its `extract_date` partitions) in the Glue Data Catalog.
-7. **Data Quality Checks** Once each crawler has finished cataloging its data in the four silver S3 buckets (Exchange Rates, Airplane Ticket Rates, Hotel Room Rates and Destination Activities), a dedicated data quality check runs against each dataset before the final transformation script executes.
+7. **Data Quality Checks** Once each crawler has finished cataloging its data in the four silver S3 buckets (Exchange Rates, Airplane Ticket Rates, Hotel Room Rates and Destination Activities), a dedicated data quality check runs against each dataset before the final transformation glue job script executes.
 
-   These checks are orchestrated through AWS Step Functions to decouple orchestration from the processing logic. This keeps the pipeline easy to scale and maintain as new sources or rules are added.
-
-   Each dataset has its own response to a failed ruleset based on how much its data affects the final analysis.
+   Each dataset has an alert and continue response to a failed ruleset. The percentage of records needing to pass the data quality check depends on how much the data affects the final analysis.
 
 | Crawler                                    | On Failure                                          | Rationale                                                                                                                                                                                                   |
 | ------------------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -130,7 +128,7 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 8. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog.
 9. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket within the silver layer, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
 
-10. **Final Data Quality Check** This data quality check runs against the combined dataset in the final silver-layer S3 bucket using a fail fast rule. Fail fast is used here because the combined dataset feeds directly into the Glue job that loads data into the gold layer which is organized into four clusters. A critical schema issue or data anomaly at this stage could corrupt the downstream analysis in the gold layer or cause records to be categorized into the wrong gold layer cluster. These errors would propagate silently and be difficult to unwind once in the gold layer so stopping the pipeline is safer than continuing with bad data.
+10. **Final Data Quality Check** This data quality check runs against the combined dataset in the final silver-layer S3 bucket using a fail fast rule. Fail fast is used here because the combined dataset feeds directly into the Glue job that loads data into the gold layer, which is organized into four clusters. A critical schema issue or data anomaly at this stage could corrupt the downstream analysis in the gold layer or cause records to be categorized into the wrong gold layer cluster. These errors would propagate silently and be difficult to unwind once in the gold layer so stopping the pipeline is safer than continuing with bad data.
 
 11. **Load → Gold** A load Glue job script reads the combined Parquet dataset metadata from the Glue Data Catalog and writes it into the gold layer. The gold layer consists of four Amazon Aurora Serverless clusters. Each cluster corresponds to a specific region and datasets are grouped by region based on each destinations latitude and longitude. Destinations in the United States and Canada are grouped into West or East regions, while destinations in Mexico are grouped into North or South regions.
 12. **Athena** queries the gold Parquet files in Amazon Aurora Serverless through the Glue Data Catalog.
@@ -151,7 +149,7 @@ The entire pipeline runs inside a dedicated VPC designed securely with high avai
 
 ### VPC Architecture Diagram
 
-_Note: No Load Balancer was used to optimize on cost savings due to only one person using this ETL pipeline. Two AZ's were configured in production mode in order to create a pipeline with high availability, but only one AZ was configured and used during the development phase to further optimize cost savings._
+_Note: No Load Balancer was used to optimize on cost savings due to only one person using this ETL pipeline. Two AZ's were configured in production mode in order to create a pipeline with high availability, but only one AZ was configured and used during the development phase to further optimize on cost savings._
 
 ![VPC Architecture Diagram](docs/images/VPC_Architecture_Diagram.svg)
 
