@@ -66,6 +66,7 @@ The summary tables below the maps rank destinations by total cost in ascending o
 - AWS Glue Crawlers
 - AWS Glue Data Catalog
 - AWS Glue Data Quality
+- Amazon SNS
 - Amazon S3 (bronze and silver layer)
 - Amazon Aurora Serverless (gold layer)
 - Amazon Athena
@@ -115,12 +116,12 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
    Each dataset has its own response to a failed ruleset based on how much its data affects the final analysis.
 
-| Crawler                                    | On Failure                                         | Rationale                                                                                                                                                                                                   |
-| ------------------------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `transform-exchange-rates-crawler`         | Log and continue                                   | The exchange rate API returns a very small dataset, so a failure has minimal impact downstream.                                                                                                             |
-| `transform-airplane-ticket-rates-crawler`  | Alert and continue if more than 5% of records fail | Ticket prices directly drive the trip cost calculations, so significant data loss needs visibility.                                                                                                         |
-| `transform-hotel-room-rates-crawler`       | Alert and continue if more than 5% of records fail | Hotel prices are the other direct input to the trip cost calculations.                                                                                                                                      |
-| `transform-destination-activities-crawler` | Log and continue                                   | This dataset is large but inherently messy. Because so many activities are extracted, a small number of bad records won't meaningfully affect the analysis and plenty of valid activities remain available. |
+| Crawler                                    | On Failure                                          | Rationale                                                                                                                                                                                                   |
+| ------------------------------------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transform-exchange-rates-crawler`         | Alert and continue if more than 10% of records fail | The exchange rate API returns a very small dataset, so a failure has minimal impact downstream.                                                                                                             |
+| `transform-airplane-ticket-rates-crawler`  | Alert and continue if more than 5% of records fail  | Ticket prices directly drive the trip cost calculations, so significant data loss needs visibility.                                                                                                         |
+| `transform-hotel-room-rates-crawler`       | Alert and continue if more than 5% of records fail  | Hotel prices are the other direct input to the trip cost calculations.                                                                                                                                      |
+| `transform-destination-activities-crawler` | Alert and continue if more than 10% of records fail | This dataset is large but inherently messy. Because so many activities are extracted, a small number of bad records won't meaningfully affect the analysis and plenty of valid activities remain available. |
 
 8. **Final Transform → Silver** A final AWS Glue job script joins the four silver datasets into one combined Parquet dataset. Instead of pointing at the S3 buckets and inferring schemas from the files on every run, the script reads each dataset through its table in the Glue Data Catalog.
 9. **Catalog** Once the final transform Glue job script joins the datasets and sets it into it's S3 bucket within the silver layer, a Glue Crawler crawls the final S3 bucket to infer its schema and register it as a table in the Glue Data Catalog.
