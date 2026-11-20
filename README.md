@@ -100,6 +100,10 @@ Every layer is partitioned by `extract_date=YYYY-MM-DD/`.
 
 ![Data Engineering Architecture Diagram](docs/images/Data_Engineering_Diagram.svg)
 
+### Step Functions Diagram
+
+![ETL Step Functions Diagram](docs/images/Step_Functions_Diagram.svg)
+
 ### ETL Workflow Steps
 
 1. **EventBridge** runs a daily schedule that starts the Step Functions workflow allowing the full ETL pipeline to run every morning.
