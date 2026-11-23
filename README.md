@@ -202,7 +202,7 @@ _Note: No Load Balancer was used to optimize on cost savings due to only one per
 
 - AWS CloudTrail logs every API call and job event for compliance and auditing
 - VPC Flow Logs send all IP traffic records to CloudWatch
-- Data quality monitoring: A number of AWS Glue Data Quality checks in the silver layer are set to alert and continue on failure. A CloudWatch Alarm watches these failures and sends an SNS notification when a threshold is crossed, allowing data corruption is caught early.
+- Data quality monitoring: A number of AWS Glue Data Quality checks in the silver layer are set to alert and continue on failure. Once a certain threshold is crossed for each quality check, an SNS notification is sent via AWS SNS allowing data corruption to be caught early. Each data quality check has an individual SNS topic to ensure all notifications are nicely organized with a standard configuration for cost savings.
 
 ## Athena/Aurora Federated Query Connector
 
