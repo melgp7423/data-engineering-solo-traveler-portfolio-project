@@ -194,7 +194,11 @@ def test_keeps_all_metadata_parameters_and_only_requested_property_fields():
 
 
 def test_search_info_repeated_on_every_property_row():
-    props = [make_property(name="A"), make_property(name="B"), make_property(name="C")]
+    props = [
+        make_property(name="A", property_token="tok-a"),
+        make_property(name="B", property_token="tok-b"),
+        make_property(name="C", property_token="tok-c"),
+    ]
     table = HotelsTransformer().transform(make_payload(props))
 
     assert table.num_rows == 3
@@ -346,7 +350,9 @@ def test_service_transforms_every_file_in_partition():
         objects={
             ("raw-bucket", RAW_KEY): json.dumps(make_payload()).encode(),
             ("raw-bucket", OTHER_KEY): json.dumps(
-                make_payload([make_property(), make_property()])
+                make_payload(
+                    [make_property(), make_property(name="B", property_token="tok-2")]
+                )
             ).encode(),
         },
         pages=[{"Contents": [{"Key": RAW_KEY}, {"Key": OTHER_KEY}]}],
@@ -357,6 +363,7 @@ def test_service_transforms_every_file_in_partition():
     assert result["status"] == "SUCCEEDED"
     assert result["file_count"] == 2
     assert result["row_count"] == 3
+    assert result["duplicates_removed"] == 0
     assert [p["Key"] for p in s3.puts] == [
         OTHER_KEY.replace(".json", ".parquet"),
         RAW_KEY.replace(".json", ".parquet"),
@@ -364,6 +371,57 @@ def test_service_transforms_every_file_in_partition():
     written = pq.read_table(io.BytesIO(s3.puts[0]["Body"]))
     assert written.num_rows == 2
     assert written.to_pylist()[0]["amenities"][0] == "Free Wi-Fi"
+
+
+def test_drops_properties_with_a_repeated_token_keeping_the_first():
+    props = [
+        make_property(name="A", property_token="tok-a", overall_rating=4.5),
+        make_property(name="B", property_token="tok-b"),
+        make_property(name="A again", property_token="tok-a", overall_rating=3.0),
+    ]
+    table = HotelsTransformer().transform(make_payload(props))
+
+    assert table.column("name").to_pylist() == ["A", "B"]
+    assert table.column("overall_rating").to_pylist()[0] == 4.5
+
+
+def test_drops_identical_rows_when_properties_have_no_token():
+    prop = make_property()
+    del prop["property_token"]
+    other = dict(prop, name="Other hotel")
+    table = HotelsTransformer().transform(make_payload([prop, dict(prop), other]))
+
+    assert table.column("name").to_pylist() == [prop["name"], "Other hotel"]
+
+
+def test_drops_identical_rows_even_when_tokens_differ():
+    props = [make_property(property_token="tok-1"), make_property(property_token="tok-2")]
+    assert HotelsTransformer().transform(make_payload(props)).num_rows == 1
+
+
+def test_keeps_tokenless_properties_that_differ():
+    a, b = make_property(name="A"), make_property(name="B")
+    for prop in (a, b):
+        del prop["property_token"]
+    assert HotelsTransformer().transform(make_payload([a, b])).num_rows == 2
+
+
+def test_service_reports_duplicates_removed_per_file_and_in_total():
+    s3 = FakeS3(
+        objects={
+            ("raw-bucket", RAW_KEY): json.dumps(
+                make_payload([make_property(), make_property(), "not a dict"])
+            ).encode(),
+        },
+        pages=[{"Contents": [{"Key": RAW_KEY}]}],
+    )
+
+    result = build_service(s3).run({})
+
+    assert result["row_count"] == 1
+    assert result["duplicates_removed"] == 1
+    assert result["written"][0]["duplicates_removed"] == 1
+    assert pq.read_table(io.BytesIO(s3.puts[0]["Body"])).num_rows == 1
 
 
 def test_service_skips_bad_file_and_reports_partial():

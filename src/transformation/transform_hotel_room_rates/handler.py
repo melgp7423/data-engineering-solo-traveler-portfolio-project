@@ -200,7 +200,7 @@ class HotelsTransformer:
                 parameters, self.PARAMETER_FIELDS, self.PARAMETERS_PREFIX
             ),
         }
-        rows = [self._clean_property(p) for p in properties if isinstance(p, dict)]
+        rows = self._dedupe_rows(properties)
 
         columns: Dict[str, pa.Array] = {}
         fields: List[pa.Field] = []
@@ -240,6 +240,34 @@ class HotelsTransformer:
                 )
                 columns[prefix + field_name] = (text, pa.string())
         return columns
+
+    def _dedupe_rows(self, properties: List[object]) -> List[Dict[str, object]]:
+        rows: List[Dict[str, object]] = []
+        seen_tokens, seen_rows = set(), set()
+        candidates = [p for p in properties if isinstance(p, dict)]
+        for prop in candidates:
+            token = str(prop.get("property_token") or "").strip()
+            row = self._clean_property(prop)
+            row_identity = json.dumps(row, sort_keys=True, default=str)
+            if (token and token in seen_tokens) or row_identity in seen_rows:
+                continue
+            if token:
+                seen_tokens.add(token)
+            seen_rows.add(row_identity)
+            rows.append(row)
+
+        removed = len(candidates) - len(rows)
+        if removed:
+            logger.info("Dropped %d duplicate properties", removed)
+        return rows
+
+    @staticmethod
+    def count_properties(payload: Dict) -> int:
+        """Number of property records in a raw payload, before deduplication."""
+        properties = payload.get("properties")
+        if not isinstance(properties, list):
+            return 0
+        return sum(isinstance(p, dict) for p in properties)
 
     @staticmethod
     def _clean_property(prop: Dict) -> Dict[str, object]:
@@ -354,9 +382,13 @@ class TransformService:
                 failed.append({"source_key": raw_key, "error": str(err)})
                 continue
             key = self._writer.write(self._key_builder.build(raw_key), table)
+            duplicates_removed = (
+                self._transformer.count_properties(payload) - table.num_rows
+            )
             logger.info(
-                "Wrote %d properties to s3://%s/%s",
+                "Wrote %d properties (%d duplicates removed) to s3://%s/%s",
                 table.num_rows,
+                duplicates_removed,
                 self._writer.bucket,
                 key,
             )
@@ -366,6 +398,7 @@ class TransformService:
                     "key": key,
                     "search_id": payload["search_metadata"].get("id"),
                     "row_count": table.num_rows,
+                    "duplicates_removed": duplicates_removed,
                 }
             )
 
@@ -380,6 +413,9 @@ class TransformService:
             "bucket": self._writer.bucket,
             "file_count": len(written),
             "row_count": sum(item["row_count"] for item in written),
+            "duplicates_removed": sum(
+                item["duplicates_removed"] for item in written
+            ),
             "written": written,
             "failed": failed,
         }
