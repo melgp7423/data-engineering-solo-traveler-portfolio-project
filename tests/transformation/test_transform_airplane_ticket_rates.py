@@ -157,6 +157,34 @@ def test_metadata_repeated_on_every_deal_row():
     assert table.column("name").to_pylist() == ["Richmond", "Madison", "Provo"]
 
 
+def test_drops_repeated_destination_and_dates_keeping_the_first():
+    deals = [
+        make_deal(name="Richmond", price=281),
+        make_deal(name="Madison", destination_id="/m/other"),
+        make_deal(name="Richmond again", price=300),
+    ]
+    table = DealsTransformer().transform(make_payload(deals))
+
+    assert table.column("name").to_pylist() == ["Richmond", "Madison"]
+    assert table.column("price").to_pylist()[0] == 281
+
+
+def test_keeps_same_destination_on_different_dates():
+    deals = [make_deal(), make_deal(outbound_date="2026-11-01")]
+    table = DealsTransformer().transform(make_payload(deals))
+
+    assert table.num_rows == 2
+
+
+def test_drops_identical_rows_when_deals_have_no_destination_id():
+    deal = make_deal()
+    del deal["destination_id"]
+    other = dict(deal, name="Other")
+    table = DealsTransformer().transform(make_payload([deal, dict(deal), other]))
+
+    assert table.column("name").to_pylist() == ["Richmond", "Other"]
+
+
 @pytest.mark.parametrize("description", ["", "   ", "\n", None, "MISSING"])
 def test_empty_or_missing_description_becomes_no_description(description):
     deal = make_deal(description=description)
@@ -358,6 +386,7 @@ def test_service_reads_json_and_writes_parquet():
     assert result["bucket"] == BUCKET
     assert result["key"] == TRANSFORMED_KEY
     assert result["row_count"] == 1
+    assert result["duplicates_removed"] == 0
     assert result["search_id"] == "6ac5968a919dfa73ed4e0e7c"
 
     assert len(s3.puts) == 1

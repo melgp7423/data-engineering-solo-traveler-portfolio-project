@@ -171,7 +171,7 @@ class DealsTransformer:
             raise InvalidRawPayloadError("Raw payload has no deals array")
 
         metadata_columns = self._metadata_columns(metadata)
-        rows = [self._clean_deal(deal) for deal in deals]
+        rows = self._dedupe_rows(deals)
 
         columns: Dict[str, pa.Array] = {}
         fields: List[pa.Field] = []
@@ -183,6 +183,38 @@ class DealsTransformer:
             fields.append(pa.field(name, arrow_type))
 
         return pa.Table.from_pydict(columns, schema=pa.schema(fields))
+
+    def _dedupe_rows(self, deals: List[object]) -> List[Dict[str, object]]:
+        rows: List[Dict[str, object]] = []
+        seen_keys, seen_rows = set(), set()
+        candidates = [d for d in deals if isinstance(d, dict)]
+        for deal in candidates:
+            row = self._clean_deal(deal)
+            destination = str(deal.get("destination_id") or "").strip()
+            key = (
+                (destination, row["outbound_date"], row["return_date"])
+                if destination
+                else None
+            )
+            row_identity = json.dumps(row, sort_keys=True, default=str)
+            if (key and key in seen_keys) or row_identity in seen_rows:
+                continue
+            if key:
+                seen_keys.add(key)
+            seen_rows.add(row_identity)
+            rows.append(row)
+
+        removed = len(candidates) - len(rows)
+        if removed:
+            logger.info("Dropped %d duplicate deals", removed)
+        return rows
+
+    @staticmethod
+    def count_deals(payload: Dict) -> int:
+        deals = payload.get("deals")
+        if not isinstance(deals, list):
+            return 0
+        return sum(isinstance(d, dict) for d in deals)
 
     def _metadata_columns(
         self, metadata: Dict
@@ -300,9 +332,14 @@ class TransformService:
         payload = self._reader.read(raw_bucket, raw_key)
         table = self._transformer.transform(payload)
         key = self._writer.write(self._key_builder.build(raw_key), table)
+        duplicates_removed = self._transformer.count_deals(payload) - table.num_rows
 
         logger.info(
-            "Wrote %d deals to s3://%s/%s", table.num_rows, self._writer.bucket, key
+            "Wrote %d deals (%d duplicates removed) to s3://%s/%s",
+            table.num_rows,
+            duplicates_removed,
+            self._writer.bucket,
+            key,
         )
         return {
             "status": "SUCCEEDED",
@@ -312,6 +349,7 @@ class TransformService:
             "key": key,
             "search_id": payload["search_metadata"].get("id"),
             "row_count": table.num_rows,
+            "duplicates_removed": duplicates_removed,
         }
 
 
