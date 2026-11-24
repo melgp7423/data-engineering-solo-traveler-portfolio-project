@@ -1,5 +1,7 @@
 # Solo Traveler Data Engineering Project
 
+For a walkthrough of this pipeline's extraction, transformation and loading phases, [read my technical blog post on Hashnode](https://melgp7423-data-engineering-pipelines.hashnode.dev/solo-traveler-etl-pipeline). It covers each phase in detail, including the tooling decisions, tradeoffs, security measures taken and lessons I learned during this process.
+
 ## Table of Contents
 
 - [Overview](#overview)
