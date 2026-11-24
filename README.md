@@ -168,7 +168,7 @@ _Note: No Load Balancer was used to optimize on cost savings due to only one per
 
 **Encryption at Rest**
 
-- All S3 buckets and Aurora DSQL clusters are configured to use SSE-S3 keys for the data to have encryption at rest
+- All S3 buckets are configured to use SSE-S3 keys for the data to have encryption at rest while Aurora DSQL clusters are configured to use cluster KMS keys.
 
 **Encryption in Transit**
 
